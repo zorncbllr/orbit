@@ -9,33 +9,9 @@ import {
   relativeTime,
 } from "../lib/utils";
 import type { Priority, TaskStatus } from "../lib/types";
+import { parseSchedule, scheduleSummary } from "../lib/schedule";
+import SchedulePicker from "./SchedulePicker";
 import { ConfirmDialog } from "./ui";
-
-function toInputValue(ts: number | null): string {
-  if (!ts) return "";
-  const d = new Date(ts);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function fromInputValue(v: string): number | null {
-  if (!v) return null;
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? null : d.getTime();
-}
-
-function dateToValue(ts: number | null): string {
-  if (!ts) return "";
-  const d = new Date(ts);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function fromDateValue(v: string): number | null {
-  if (!v) return null;
-  const d = new Date(v + "T00:00:00");
-  return isNaN(d.getTime()) ? null : d.getTime();
-}
 
 const STATUSES: TaskStatus[] = ["todo", "in_progress", "done", "blocked"];
 
@@ -53,11 +29,8 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
   const [status, setStatus] = useState<TaskStatus>("todo");
   const [priority, setPriority] = useState<Priority>("medium");
   const [projectId, setProjectId] = useState<string | null>(null);
-  const [due, setDue] = useState("");
-  const [schedStart, setSchedStart] = useState("");
-  const [schedEnd, setSchedEnd] = useState("");
-  const [duration, setDuration] = useState("");
   const [subtaskInput, setSubtaskInput] = useState("");
+  const [nl, setNl] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
@@ -67,10 +40,6 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
     setStatus(task.status);
     setPriority(task.priority);
     setProjectId(task.project_id);
-    setDue(dateToValue(task.due_at));
-    setSchedStart(toInputValue(task.scheduled_start));
-    setSchedEnd(toInputValue(task.scheduled_end));
-    setDuration(task.estimated_duration ? String(task.estimated_duration) : "");
   }, [task]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { updateTask, deleteTask, duplicateTask } = useStore.getState();
@@ -111,11 +80,29 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
   };
 
   const sched = useMemo(() => {
-    const s = fromInputValue(schedStart);
-    const e = fromInputValue(schedEnd);
+    const s = task.scheduled_start;
+    const e = task.scheduled_end;
     if (s && e && e > s) return { start: s, end: e };
     return null;
-  }, [schedStart, schedEnd]);
+  }, [task.scheduled_start, task.scheduled_end]);
+
+  const nlParsed = useMemo(() => (nl.trim() ? parseSchedule(nl) : null), [nl]);
+  const nlSummary =
+    nlParsed && (nlParsed.due_at || nlParsed.scheduled_start)
+      ? scheduleSummary(nlParsed)
+      : null;
+
+  const applyNl = () => {
+    if (!nlParsed) return;
+    const patch: Parameters<typeof updateTask>[1] = {};
+    if (nlParsed.due_at != null) patch.due_at = nlParsed.due_at;
+    if (nlParsed.scheduled_start != null) {
+      patch.scheduled_start = nlParsed.scheduled_start;
+      patch.scheduled_end = nlParsed.scheduled_end ?? null;
+    }
+    push(patch);
+    setNl("");
+  };
 
   return (
     <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-[440px] flex-col border-l border-line bg-surface shadow-2xl shadow-ink/10 dark:border-line-dark dark:bg-surface-dark-card">
@@ -226,67 +213,45 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
 
           <div>
             <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-faint">
-              Due date
+              When
             </label>
-            <input
-              type="date"
-              value={due}
-              onChange={(e) => {
-                setDue(e.target.value);
-                push({ due_at: fromDateValue(e.target.value) });
-              }}
-              className="input"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-faint">
-              Scheduled time
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                type="datetime-local"
-                value={schedStart}
-                onChange={(e) => {
-                  setSchedStart(e.target.value);
-                  const s = fromInputValue(e.target.value);
-                  const e2 = fromInputValue(schedEnd);
-                  push({ scheduled_start: s });
-                  if (s && e2 && e2 <= s) {
-                    const ne = s + 60 * 60000;
-                    setSchedEnd(toInputValue(ne));
-                    push({ scheduled_end: ne });
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 rounded-lg border border-dashed border-line px-2.5 py-1.5 transition-colors focus-within:border-solid focus-within:border-br dark:border-line-dark">
+                <input
+                  value={nl}
+                  onChange={(e) => setNl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && applyNl()}
+                  placeholder='Try "fri 3pm to 5pm", "due tomorrow", "next week 10am"…'
+                  className="flex-1 bg-transparent text-[13px] text-ink placeholder:text-faint focus:outline-none dark:text-[#e8efe9]"
+                />
+                {nlSummary && (
+                  <button onClick={applyNl} className="btn btn-ghost shrink-0 px-2 py-0.5 text-[11px]">
+                    Add
+                  </button>
+                )}
+              </div>
+              {nlSummary && (
+                <p className="text-[11.5px] text-br-deep dark:text-[#a7d3ba]">{nlSummary}</p>
+              )}
+              <div className="rounded-lg border border-line p-3 dark:border-line-dark">
+                <SchedulePicker
+                  value={{
+                    due_at: task.due_at,
+                    scheduled_start: task.scheduled_start,
+                    scheduled_end: task.scheduled_end,
+                    estimated_duration: task.estimated_duration,
+                  }}
+                  onChange={(v) =>
+                    push({
+                      due_at: v.due_at,
+                      scheduled_start: v.scheduled_start,
+                      scheduled_end: v.scheduled_end,
+                      estimated_duration: v.estimated_duration,
+                    })
                   }
-                }}
-                className="input"
-              />
-              <input
-                type="datetime-local"
-                value={schedEnd}
-                onChange={(e) => {
-                  setSchedEnd(e.target.value);
-                  push({ scheduled_end: fromInputValue(e.target.value) });
-                }}
-                className="input"
-              />
+                />
+              </div>
             </div>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-faint">
-              Estimated duration (minutes)
-            </label>
-            <input
-              type="number"
-              min={5}
-              step={5}
-              value={duration}
-              onChange={(e) => {
-                setDuration(e.target.value);
-                push({ estimated_duration: e.target.value ? Number(e.target.value) : null });
-              }}
-              className="input"
-            />
           </div>
 
           <div>

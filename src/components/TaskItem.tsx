@@ -3,6 +3,7 @@ import { CalendarClock, Circle, CircleCheck, ListChecks } from "lucide-react";
 import { useStore, type TaskWithExtras } from "../lib/store";
 import type { Project } from "../lib/types";
 import { cn, formatTime, isOverdue, relativeTime } from "../lib/utils";
+import SchedulePopover from "./SchedulePopover";
 
 export default function TaskItem({
   task,
@@ -19,7 +20,9 @@ export default function TaskItem({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.title);
+  const [schedOpen, setSchedOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const schedBtnRef = useRef<HTMLButtonElement>(null);
   const done = task.status === "done";
   const overdue = isOverdue(task);
   const subtaskDone = task.subtasks.filter((s) => s.completed).length;
@@ -136,12 +139,51 @@ export default function TaskItem({
               {subtaskDone}/{subtaskTotal}
             </span>
           )}
+          <button
+            ref={schedBtnRef}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSchedOpen((o) => !o);
+            }}
+            aria-label="Set due date or schedule"
+            title="Set due date or schedule"
+            className={cn(
+              "chip cursor-pointer border transition-colors",
+              schedOpen || task.scheduled_start || task.due_at
+                ? "border-br/50 text-br-deep dark:border-[#5f9d7c] dark:text-[#a7d3ba]"
+                : "border-line text-muted hover:border-br hover:text-br-deep dark:border-line-dark dark:hover:border-[#5f9d7c] dark:hover:text-[#a7d3ba]"
+            )}
+          >
+            <CalendarClock className="h-3 w-3" />
+          </button>
         </div>
       </div>
 
       <span className="mt-1 hidden shrink-0 text-[11px] text-faint group-hover:block">
         {relativeTime(task.updated_at)}
       </span>
+
+      <div onClick={(e) => e.stopPropagation()}>
+        <SchedulePopover
+          open={schedOpen}
+          onClose={() => setSchedOpen(false)}
+          anchor={schedBtnRef.current}
+          value={{
+            due_at: task.due_at,
+            scheduled_start: task.scheduled_start,
+            scheduled_end: task.scheduled_end,
+            estimated_duration: task.estimated_duration,
+          }}
+          onChange={(v) =>
+            useStore.getState().updateTask(task.id, {
+              due_at: v.due_at,
+              scheduled_start: v.scheduled_start,
+              scheduled_end: v.scheduled_end,
+              estimated_duration: v.estimated_duration,
+            })
+          }
+        />
+      </div>
     </div>
   );
 }

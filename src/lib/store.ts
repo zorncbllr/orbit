@@ -98,6 +98,7 @@ interface StoreState extends PersistedState {
     scheduled_start?: number | null;
     scheduled_end?: number | null;
     due_at?: number | null;
+    skip_default_times?: boolean;
   }) => Promise<string>;
   updateTask: (id: string, patch: Partial<Task>) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
@@ -386,7 +387,9 @@ export const useStore = create<StoreState>()((set, get) => ({
                 start: input.scheduled_start ?? null,
                 end: input.scheduled_end ?? null,
               }
-            : defaultTaskTimes();
+            : input.skip_default_times
+              ? { start: null, end: null }
+              : defaultTaskTimes();
         await dbExecute(
           `INSERT INTO tasks (id, title, description, status, priority, project_id, scheduled_start, scheduled_end, due_at, created_at, updated_at)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)`,

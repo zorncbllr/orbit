@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Circle, CircleCheck, Plus } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { CalendarClock, Circle, CircleCheck, Plus } from "lucide-react";
 import { useStore, type TaskWithExtras } from "../lib/store";
 import {
   STATUS_LABELS,
@@ -9,11 +9,14 @@ import {
   isOverdue,
 } from "../lib/utils";
 import type { TaskStatus } from "../lib/types";
+import SchedulePopover from "./SchedulePopover";
 
 function KanbanCard({ task }: { task: TaskWithExtras }) {
   const openTask = useStore((s) => s.openTask);
   const project = useStore((s) => s.projects.find((p) => p.id === task.project_id));
   const overdue = isOverdue(task);
+  const [schedOpen, setSchedOpen] = useState(false);
+  const schedBtnRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div
@@ -53,6 +56,44 @@ function KanbanCard({ task }: { task: TaskWithExtras }) {
             {task.subtasks.filter((s) => s.completed).length}/{task.subtasks.length}
           </span>
         )}
+        <button
+          ref={schedBtnRef}
+          onClick={(e) => {
+            e.stopPropagation();
+            setSchedOpen((o) => !o);
+          }}
+          aria-label="Set due date or schedule"
+          title="Set due date or schedule"
+          className={cn(
+            "chip ml-auto cursor-pointer border transition-colors",
+            schedOpen || task.scheduled_start || task.due_at
+              ? "border-br/50 text-br-deep dark:border-[#5f9d7c] dark:text-[#a7d3ba]"
+              : "border-line text-faint opacity-0 transition-opacity hover:border-br hover:text-br-deep group-hover:opacity-100 dark:border-line-dark dark:hover:border-[#5f9d7c] dark:hover:text-[#a7d3ba]"
+          )}
+        >
+          <CalendarClock className="h-3 w-3" />
+        </button>
+      </div>
+      <div onClick={(e) => e.stopPropagation()}>
+        <SchedulePopover
+          open={schedOpen}
+          onClose={() => setSchedOpen(false)}
+          anchor={schedBtnRef.current}
+          value={{
+            due_at: task.due_at,
+            scheduled_start: task.scheduled_start,
+            scheduled_end: task.scheduled_end,
+            estimated_duration: task.estimated_duration,
+          }}
+          onChange={(v) =>
+            useStore.getState().updateTask(task.id, {
+              due_at: v.due_at,
+              scheduled_start: v.scheduled_start,
+              scheduled_end: v.scheduled_end,
+              estimated_duration: v.estimated_duration,
+            })
+          }
+        />
       </div>
     </div>
   );
