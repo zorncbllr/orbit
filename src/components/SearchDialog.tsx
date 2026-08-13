@@ -126,7 +126,7 @@ export default function SearchDialog() {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[18vh]">
       <div
-        className="absolute inset-0 bg-ink/30 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-ink/30 backdrop-blur-[2px] dark:bg-black/50"
         onClick={() => setOpen(false)}
       />
       <div className="relative z-10 w-full max-w-xl overflow-hidden rounded-xl border border-line bg-surface shadow-2xl dark:border-line-dark dark:bg-surface-dark-card">

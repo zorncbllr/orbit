@@ -383,7 +383,9 @@ export const useStore = create<StoreState>()((set, get) => ({
         persistPatch({ notif });
       },
       setUi: (patch) => {
-        const ui = { ...get().ui, ...patch };
+        const current = get().ui;
+        if (Object.keys(patch).every((k) => current[k] === patch[k])) return;
+        const ui = { ...current, ...patch };
         set({ ui });
         persistUi(ui);
       },
@@ -422,23 +424,6 @@ export const useStore = create<StoreState>()((set, get) => ({
             : input.skip_default_times
               ? { start: null, end: null }
               : defaultTaskTimes();
-        await dbExecute(
-          `INSERT INTO tasks (id, title, description, status, priority, project_id, scheduled_start, scheduled_end, due_at, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-          [
-            id,
-            input.title,
-            "",
-            input.status ?? "todo",
-            input.priority ?? "medium",
-            input.project_id ?? null,
-            times.start,
-            times.end,
-            input.due_at ?? null,
-            t,
-            t,
-          ]
-        );
         const task: TaskWithExtras = {
           id,
           title: input.title,
@@ -456,6 +441,23 @@ export const useStore = create<StoreState>()((set, get) => ({
           dependencies: [],
         };
         set({ tasks: [...get().tasks, task] });
+        void dbExecute(
+          `INSERT INTO tasks (id, title, description, status, priority, project_id, scheduled_start, scheduled_end, due_at, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+          [
+            id,
+            input.title,
+            "",
+            input.status ?? "todo",
+            input.priority ?? "medium",
+            input.project_id ?? null,
+            times.start,
+            times.end,
+            input.due_at ?? null,
+            t,
+            t,
+          ]
+        ).catch(() => {});
         return id;
       },
 
@@ -473,25 +475,25 @@ export const useStore = create<StoreState>()((set, get) => ({
         ];
         const cols = allowed.filter((k) => k in patch);
         if (cols.length === 0) return;
+        set({ tasks: patchTaskIn(get().tasks, id, patch) });
         const sets = cols.map((c) => `${c} = ?`).join(", ");
         const vals = cols.map((c) =>
           patch[c as keyof Task] === undefined ? null : patch[c as keyof Task]
         ) as unknown[];
-        await dbExecute(
+        void dbExecute(
           `UPDATE tasks SET ${sets}, updated_at = ? WHERE id = ?`,
           [...vals, now(), id]
-        );
-        set({ tasks: patchTaskIn(get().tasks, id, patch) });
+        ).catch(() => {});
       },
 
       deleteTask: async (id) => {
-        await dbExecute("DELETE FROM tasks WHERE id = ?", [id]);
         set({
           tasks: get().tasks.filter((t) => t.id !== id),
           notes: get().notes.map((n) =>
             n.task_id === id ? { ...n, task_id: null } : n
           ),
         });
+        void dbExecute("DELETE FROM tasks WHERE id = ?", [id]).catch(() => {});
       },
 
       duplicateTask: async (id) => {
@@ -503,7 +505,18 @@ export const useStore = create<StoreState>()((set, get) => ({
           src.scheduled_start != null || src.scheduled_end != null
             ? { start: src.scheduled_start, end: src.scheduled_end }
             : defaultTaskTimes();
-        await dbExecute(
+        const task: TaskWithExtras = {
+          ...src,
+          id: newIdStr,
+          scheduled_start: times.start,
+          scheduled_end: times.end,
+          created_at: t,
+          updated_at: t,
+          subtasks: src.subtasks.map((s) => ({ ...s, id: newId(), task_id: newIdStr })),
+          dependencies: [],
+        };
+        set({ tasks: [...get().tasks, task] });
+        void dbExecute(
           `INSERT INTO tasks (id, title, description, status, priority, project_id, scheduled_start, scheduled_end, due_at, estimated_duration, created_at, updated_at)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
@@ -520,34 +533,19 @@ export const useStore = create<StoreState>()((set, get) => ({
             t,
             t,
           ]
-        );
+        ).catch(() => {});
         for (const s of src.subtasks) {
-          await dbExecute(
+          void dbExecute(
             `INSERT INTO subtasks (id, task_id, title, completed, created_at) VALUES (?,?,?,?,?)`,
             [newId(), newIdStr, s.title, s.completed ? 1 : 0, t]
-          );
+          ).catch(() => {});
         }
-        const task: TaskWithExtras = {
-          ...src,
-          id: newIdStr,
-          scheduled_start: times.start,
-          scheduled_end: times.end,
-          created_at: t,
-          updated_at: t,
-          subtasks: src.subtasks.map((s) => ({ ...s, id: newId(), task_id: newIdStr })),
-          dependencies: [],
-        };
-        set({ tasks: [...get().tasks, task] });
         return newIdStr;
       },
 
       addSubtask: async (taskId, title) => {
         const id = newId();
         const t = now();
-        await dbExecute(
-          "INSERT INTO subtasks (id, task_id, title, completed, created_at) VALUES (?,?,?,0,?)",
-          [id, taskId, title, t]
-        );
         set({
           tasks: get().tasks.map((task) =>
             task.id === taskId
@@ -562,6 +560,10 @@ export const useStore = create<StoreState>()((set, get) => ({
               : task
           ),
         });
+        void dbExecute(
+          "INSERT INTO subtasks (id, task_id, title, completed, created_at) VALUES (?,?,?,0,?)",
+          [id, taskId, title, t]
+        ).catch(() => {});
       },
 
       toggleSubtask: async (taskId, subtaskId) => {
@@ -569,10 +571,6 @@ export const useStore = create<StoreState>()((set, get) => ({
         const sub = task?.subtasks.find((s) => s.id === subtaskId);
         if (!task || !sub) return;
         const completed = !sub.completed;
-        await dbExecute(
-          "UPDATE subtasks SET completed = ? WHERE id = ?",
-          [completed ? 1 : 0, subtaskId]
-        );
         set({
           tasks: get().tasks.map((t) =>
             t.id === taskId
@@ -586,10 +584,13 @@ export const useStore = create<StoreState>()((set, get) => ({
               : t
           ),
         });
+        void dbExecute(
+          "UPDATE subtasks SET completed = ? WHERE id = ?",
+          [completed ? 1 : 0, subtaskId]
+        ).catch(() => {});
       },
 
       removeSubtask: async (taskId, subtaskId) => {
-        await dbExecute("DELETE FROM subtasks WHERE id = ?", [subtaskId]);
         set({
           tasks: get().tasks.map((t) =>
             t.id === taskId
@@ -601,31 +602,28 @@ export const useStore = create<StoreState>()((set, get) => ({
               : t
           ),
         });
+        void dbExecute("DELETE FROM subtasks WHERE id = ?", [subtaskId]).catch(() => {});
       },
 
       setDependencies: async (taskId, deps) => {
-        await dbExecute("DELETE FROM task_dependencies WHERE task_id = ?", [taskId]);
-        for (const dep of deps) {
-          if (dep === taskId) continue;
-          await dbExecute(
-            "INSERT OR IGNORE INTO task_dependencies (task_id, depends_on_task_id) VALUES (?,?)",
-            [taskId, dep]
-          );
-        }
         set({
           tasks: get().tasks.map((t) =>
             t.id === taskId ? { ...t, dependencies: deps.filter((d) => d !== taskId) } : t
           ),
         });
+        void dbExecute("DELETE FROM task_dependencies WHERE task_id = ?", [taskId]).catch(() => {});
+        for (const dep of deps) {
+          if (dep === taskId) continue;
+          void dbExecute(
+            "INSERT OR IGNORE INTO task_dependencies (task_id, depends_on_task_id) VALUES (?,?)",
+            [taskId, dep]
+          ).catch(() => {});
+        }
       },
 
       createProject: async (input) => {
         const id = newId();
         const t = now();
-        await dbExecute(
-          "INSERT INTO projects (id, name, description, status, created_at, updated_at) VALUES (?,?,?,'active',?,?)",
-          [id, input.name, input.description ?? "", t, t]
-        );
         const project: Project = {
           id,
           name: input.name,
@@ -636,6 +634,10 @@ export const useStore = create<StoreState>()((set, get) => ({
           updated_at: t,
         };
         set({ projects: [...get().projects, project] });
+        void dbExecute(
+          "INSERT INTO projects (id, name, description, status, created_at, updated_at) VALUES (?,?,?,'active',?,?)",
+          [id, input.name, input.description ?? "", t, t]
+        ).catch(() => {});
         return id;
       },
 
@@ -643,21 +645,20 @@ export const useStore = create<StoreState>()((set, get) => ({
         const allowed: (keyof Project)[] = ["name", "description", "color", "status"];
         const cols = allowed.filter((k) => k in patch);
         if (cols.length === 0) return;
-        const sets = cols.map((c) => `${c} = ?`).join(", ");
-        const vals = cols.map((c) => patch[c as keyof Project]) as unknown[];
-        await dbExecute(
-          `UPDATE projects SET ${sets}, updated_at = ? WHERE id = ?`,
-          [...vals, now(), id]
-        );
         set({
           projects: get().projects.map((p) =>
             p.id === id ? { ...p, ...patch, updated_at: now() } : p
           ),
         });
+        const sets = cols.map((c) => `${c} = ?`).join(", ");
+        const vals = cols.map((c) => patch[c as keyof Project]) as unknown[];
+        void dbExecute(
+          `UPDATE projects SET ${sets}, updated_at = ? WHERE id = ?`,
+          [...vals, now(), id]
+        ).catch(() => {});
       },
 
       deleteProject: async (id) => {
-        await dbExecute("DELETE FROM projects WHERE id = ?", [id]);
         set({
           projects: get().projects.filter((p) => p.id !== id),
           tasks: get().tasks.map((t) =>
@@ -670,15 +671,12 @@ export const useStore = create<StoreState>()((set, get) => ({
             e.project_id === id ? { ...e, project_id: null } : e
           ),
         });
+        void dbExecute("DELETE FROM projects WHERE id = ?", [id]).catch(() => {});
       },
 
       createNote: async (input) => {
         const id = newId();
         const t = now();
-        await dbExecute(
-          "INSERT INTO notes (id, title, content, project_id, task_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
-          [id, input.title ?? "", input.content ?? "", input.project_id ?? null, input.task_id ?? null, t, t]
-        );
         const note: Note = {
           id,
           title: input.title ?? "",
@@ -689,6 +687,10 @@ export const useStore = create<StoreState>()((set, get) => ({
           updated_at: t,
         };
         set({ notes: [note, ...get().notes] });
+        void dbExecute(
+          "INSERT INTO notes (id, title, content, project_id, task_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+          [id, input.title ?? "", input.content ?? "", input.project_id ?? null, input.task_id ?? null, t, t]
+        ).catch(() => {});
         return id;
       },
 
@@ -696,31 +698,27 @@ export const useStore = create<StoreState>()((set, get) => ({
         const allowed: (keyof Note)[] = ["title", "content", "project_id", "task_id"];
         const cols = allowed.filter((k) => k in patch);
         if (cols.length === 0) return;
-        const sets = cols.map((c) => `${c} = ?`).join(", ");
-        const vals = cols.map((c) => patch[c as keyof Note]) as unknown[];
-        await dbExecute(
-          `UPDATE notes SET ${sets}, updated_at = ? WHERE id = ?`,
-          [...vals, now(), id]
-        );
         set({
           notes: get()
             .notes.map((n) => (n.id === id ? { ...n, ...patch, updated_at: now() } : n))
             .sort((a, b) => b.updated_at - a.updated_at),
         });
+        const sets = cols.map((c) => `${c} = ?`).join(", ");
+        const vals = cols.map((c) => patch[c as keyof Note]) as unknown[];
+        void dbExecute(
+          `UPDATE notes SET ${sets}, updated_at = ? WHERE id = ?`,
+          [...vals, now(), id]
+        ).catch(() => {});
       },
 
       deleteNote: async (id) => {
-        await dbExecute("DELETE FROM notes WHERE id = ?", [id]);
         set({ notes: get().notes.filter((n) => n.id !== id) });
+        void dbExecute("DELETE FROM notes WHERE id = ?", [id]).catch(() => {});
       },
 
       createEvent: async (input) => {
         const id = newId();
         const t = now();
-        await dbExecute(
-          "INSERT INTO events (id, title, description, start_at, end_at, project_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
-          [id, input.title, "", input.start_at, input.end_at, input.project_id ?? null, t, t]
-        );
         const ev: Event = {
           id,
           title: input.title,
@@ -732,6 +730,10 @@ export const useStore = create<StoreState>()((set, get) => ({
           updated_at: t,
         };
         set({ events: [...get().events, ev].sort((a, b) => a.start_at - b.start_at) });
+        void dbExecute(
+          "INSERT INTO events (id, title, description, start_at, end_at, project_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+          [id, input.title, "", input.start_at, input.end_at, input.project_id ?? null, t, t]
+        ).catch(() => {});
         return id;
       },
 
@@ -739,22 +741,22 @@ export const useStore = create<StoreState>()((set, get) => ({
         const allowed: (keyof Event)[] = ["title", "description", "start_at", "end_at", "project_id"];
         const cols = allowed.filter((k) => k in patch);
         if (cols.length === 0) return;
-        const sets = cols.map((c) => `${c} = ?`).join(", ");
-        const vals = cols.map((c) => patch[c as keyof Event]) as unknown[];
-        await dbExecute(
-          `UPDATE events SET ${sets}, updated_at = ? WHERE id = ?`,
-          [...vals, now(), id]
-        );
         set({
           events: get()
             .events.map((e) => (e.id === id ? { ...e, ...patch, updated_at: now() } : e))
             .sort((a, b) => a.start_at - b.start_at),
         });
+        const sets = cols.map((c) => `${c} = ?`).join(", ");
+        const vals = cols.map((c) => patch[c as keyof Event]) as unknown[];
+        void dbExecute(
+          `UPDATE events SET ${sets}, updated_at = ? WHERE id = ?`,
+          [...vals, now(), id]
+        ).catch(() => {});
       },
 
       deleteEvent: async (id) => {
-        await dbExecute("DELETE FROM events WHERE id = ?", [id]);
         set({ events: get().events.filter((e) => e.id !== id) });
+        void dbExecute("DELETE FROM events WHERE id = ?", [id]).catch(() => {});
       },
 
       importPayload: async (payload) => {

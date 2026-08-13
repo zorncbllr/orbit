@@ -1,6 +1,8 @@
-import { useEffect } from "react";
+import { memo, useEffect, useState } from "react";
 import { initDb } from "./lib/db";
 import { applyTheme, tickNotifications, useStore } from "./lib/store";
+import { cn } from "./lib/utils";
+import { AppShellSkeleton, PageSkeleton } from "./components/skeletons";
 import Layout from "./components/Layout";
 import SearchDialog from "./components/SearchDialog";
 import Toasts from "./components/Toasts";
@@ -25,12 +27,55 @@ const PAGE_KEYS: Record<string, PageName> = {
   "6": "projects",
 };
 
+const MemoHomePage = memo(HomePage);
+const MemoTasksPage = memo(TasksPage);
+const MemoNotesPage = memo(NotesPage);
+const MemoKanbanPage = memo(KanbanPage);
+const MemoCalendarPage = memo(CalendarPage);
+const MemoProjectsPage = memo(ProjectsPage);
+const MemoProjectPage = memo(ProjectPage);
+const MemoSettingsPage = memo(SettingsPage);
+
 export default function App() {
   const page = useStore((s) => s.page);
   const params = useStore((s) => s.params);
   const loaded = useStore((s) => s.loaded);
   const loadAll = useStore((s) => s.loadAll);
   const theme = useStore((s) => s.theme);
+
+  const taskId = params.taskId;
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerTaskId, setDrawerTaskId] = useState<string | undefined>(undefined);
+
+  const [prevPage, setPrevPage] = useState<PageName>(page);
+  const [skeletonPage, setSkeletonPage] = useState<PageName | null>(null);
+
+  if (prevPage !== page) {
+    setPrevPage(page);
+    setSkeletonPage(page);
+  }
+
+  if (taskId) {
+    if (drawerTaskId !== taskId) setDrawerTaskId(taskId);
+    if (!drawerOpen) setDrawerOpen(true);
+  } else if (drawerOpen) {
+    setDrawerOpen(false);
+  }
+
+  useEffect(() => {
+    if (!loaded) return;
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(() => setSkeletonPage((p) => (p === page ? null : p)));
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [page, loaded]);
+
+  useEffect(() => {
+    if (!drawerOpen && drawerTaskId) {
+      const t = setTimeout(() => setDrawerTaskId(undefined), 80);
+      return () => clearTimeout(t);
+    }
+  }, [drawerOpen, drawerTaskId]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -111,13 +156,11 @@ export default function App() {
 
   if (!loaded) {
     return (
-      <div className="flex h-full items-center justify-center bg-paper dark:bg-surface-dark">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-br/15 p-2">
-            <div className="h-full w-full animate-spin rounded-full border-2 border-br border-t-transparent" />
-          </div>
-          <p className="text-sm text-muted">Loading Orbit…</p>
-        </div>
+      <div className="flex h-full">
+        <Layout />
+        <main className="min-w-0 flex-1 overflow-hidden">
+          <AppShellSkeleton />
+        </main>
       </div>
     );
   }
@@ -126,16 +169,25 @@ export default function App() {
     <div className="flex h-full">
       <Layout />
       <main className="min-w-0 flex-1 overflow-hidden">
-        {page === "home" && <HomePage />}
-        {page === "tasks" && <TasksPage />}
-        {page === "notes" && <NotesPage />}
-        {page === "kanban" && <KanbanPage />}
-        {page === "calendar" && <CalendarPage />}
-        {page === "projects" && <ProjectsPage />}
-        {page === "project" && params.projectId && <ProjectPage id={params.projectId} />}
-        {page === "settings" && <SettingsPage />}
+        {page === "home" && (skeletonPage === "home" ? <PageSkeleton page="home" /> : <MemoHomePage />)}
+        {page === "tasks" && (skeletonPage === "tasks" ? <PageSkeleton page="tasks" /> : <MemoTasksPage />)}
+        {page === "notes" && (skeletonPage === "notes" ? <PageSkeleton page="notes" /> : <MemoNotesPage />)}
+        {page === "kanban" && (skeletonPage === "kanban" ? <PageSkeleton page="kanban" /> : <MemoKanbanPage />)}
+        {page === "calendar" && (skeletonPage === "calendar" ? <PageSkeleton page="calendar" /> : <MemoCalendarPage />)}
+        {page === "projects" && (skeletonPage === "projects" ? <PageSkeleton page="projects" /> : <MemoProjectsPage />)}
+        {page === "project" &&
+          params.projectId &&
+          (skeletonPage === "project" ? <PageSkeleton page="project" /> : <MemoProjectPage id={params.projectId} />)}
+        {page === "settings" && (skeletonPage === "settings" ? <PageSkeleton page="settings" /> : <MemoSettingsPage />)}
       </main>
-      {params.taskId && <TaskDrawer taskId={params.taskId} />}
+      <div
+        className={cn(
+          "flex h-full shrink-0 flex-col overflow-hidden transition-[width] duration-80",
+          drawerOpen ? "w-[440px] ease-out" : "w-0 ease-in"
+        )}
+      >
+        {drawerTaskId && <TaskDrawer key={drawerTaskId} taskId={drawerTaskId} />}
+      </div>
       <SearchDialog />
       <Toasts />
     </div>

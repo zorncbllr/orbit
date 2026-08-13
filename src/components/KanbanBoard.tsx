@@ -126,14 +126,18 @@ export default function KanbanBoard({
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
   const [newTitle, setNewTitle] = useState<Record<string, string>>({});
 
-  const columns = STATUS_ORDER.map((status) => ({
-    status,
-    items: tasks
-      .filter((t) => t.status === status)
-      .sort(
-        (a, b) => (a.scheduled_start ?? a.due_at ?? 0) - (b.scheduled_start ?? b.due_at ?? 0)
-      ),
-  }));
+  const columns = useMemo(
+    () =>
+      STATUS_ORDER.map((status) => ({
+        status,
+        items: tasks
+          .filter((t) => t.status === status)
+          .sort(
+            (a, b) => (a.scheduled_start ?? a.due_at ?? 0) - (b.scheduled_start ?? b.due_at ?? 0)
+          ),
+      })),
+    [tasks]
+  );
 
   const onDrop = (e: React.DragEvent, status: TaskStatus) => {
     e.preventDefault();

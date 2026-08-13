@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { CalendarClock, Copy, Link2, NotebookPen, Plus, Trash2, X } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
@@ -21,7 +21,51 @@ import {
 
 const STATUSES: TaskStatus[] = ["todo", "in_progress", "done", "backlog"];
 
-export default function TaskDrawer({ taskId }: { taskId: string }) {
+const TaskTitleField = memo(function TaskTitleField({
+  taskId,
+  initial,
+}: {
+  taskId: string;
+  initial: string;
+}) {
+  const [value, setValue] = useState(initial);
+  return (
+    <input
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => {
+        const v = value.trim();
+        if (v && v !== initial) useStore.getState().updateTask(taskId, { title: v });
+      }}
+      placeholder="Task title"
+      className="input border-transparent bg-transparent px-0 py-1 text-lg font-medium text-ink shadow-none focus:border-transparent focus:shadow-none dark:text-[#e8efe9]"
+    />
+  );
+});
+
+const TaskDescriptionField = memo(function TaskDescriptionField({
+  taskId,
+  initial,
+}: {
+  taskId: string;
+  initial: string;
+}) {
+  const [value, setValue] = useState(initial);
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => {
+        if (value !== initial) useStore.getState().updateTask(taskId, { description: value });
+      }}
+      rows={6}
+      placeholder="Add a description…"
+      className="input resize-y"
+    />
+  );
+});
+
+export default function TaskDrawer({ taskId }: { taskId?: string }) {
   const task = useStore((s) => s.tasks.find((t) => t.id === taskId));
   const projects = useStore((s) => s.projects);
   const tasks = useStore((s) => s.tasks);
@@ -30,30 +74,25 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
   const closeTask = useStore((s) => s.closeTask);
   const params = useStore((s) => s.params);
 
-  const [title, setTitle] = useState("");
-  const [desc, setDesc] = useState("");
-  const [status, setStatus] = useState<TaskStatus>("todo");
-  const [priority, setPriority] = useState<Priority>("medium");
-  const [projectId, setProjectId] = useState<string | null>(null);
   const [subtaskInput, setSubtaskInput] = useState("");
   const [nl, setNl] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [depValue, setDepValue] = useState("__add");
 
-  useEffect(() => {
-    if (!task) return;
-    setTitle(task.title);
-    setDesc(task.description);
-    setStatus(task.status);
-    setPriority(task.priority);
-    setProjectId(task.project_id);
-  }, [task]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sched = useMemo(() => {
+    const s = task?.scheduled_start;
+    const e = task?.scheduled_end;
+    if (s && e && e > s) return { start: s, end: e };
+    return null;
+  }, [task?.scheduled_start, task?.scheduled_end]);
+
+  const nlParsed = useMemo(() => (nl.trim() ? parseSchedule(nl) : null), [nl]);
 
   const { updateTask, deleteTask, duplicateTask } = useStore.getState();
 
   if (!task) {
     return (
-      <div className="fixed inset-y-0 right-0 z-40 w-[420px] border-l border-line bg-surface p-6 dark:border-line-dark dark:bg-surface-dark-card">
+      <div className="flex h-full w-[440px] shrink-0 flex-col border-l border-line bg-surface p-6 dark:border-line-dark dark:bg-surface-dark-card">
         <button
           onClick={closeTask}
           className="btn btn-ghost"
@@ -86,14 +125,6 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
     navigate("notes", { noteId: id });
   };
 
-  const sched = useMemo(() => {
-    const s = task.scheduled_start;
-    const e = task.scheduled_end;
-    if (s && e && e > s) return { start: s, end: e };
-    return null;
-  }, [task.scheduled_start, task.scheduled_end]);
-
-  const nlParsed = useMemo(() => (nl.trim() ? parseSchedule(nl) : null), [nl]);
   const nlSummary =
     nlParsed && (nlParsed.due_at || nlParsed.scheduled_start)
       ? scheduleSummary(nlParsed)
@@ -112,7 +143,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-[440px] flex-col border-l border-line bg-surface shadow-2xl shadow-ink/10 dark:border-line-dark dark:bg-surface-dark-card">
+    <div className="flex h-full w-[440px] shrink-0 flex-col border-l border-line bg-surface dark:border-line-dark dark:bg-surface-dark-card">
       <div className="flex items-center justify-between border-b border-line px-5 py-3 dark:border-line-dark">
         <span className="text-[11px] font-medium uppercase tracking-wider text-faint">
           Task
@@ -127,15 +158,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
-        <input
-          value={title}
-          onChange={(e) => {
-            setTitle(e.target.value);
-          }}
-          onBlur={() => title.trim() && push({ title: title.trim() })}
-          placeholder="Task title"
-          className="input border-transparent bg-transparent px-0 py-1 text-lg font-medium text-ink shadow-none focus:border-transparent focus:shadow-none dark:text-[#e8efe9]"
-        />
+        <TaskTitleField taskId={task.id} initial={task.title} />
 
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {linkedNotes.length > 0 && (
@@ -168,7 +191,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
                   onClick={() => push({ status: st })}
                   className={cn(
                     "flex-1 rounded-md px-2 py-1 text-[12px] font-medium transition-colors",
-                    status === st
+                    task.status === st
                       ? "bg-surface text-ink shadow-sm dark:bg-surface-dark-card dark:text-[#e8efe9]"
                       : "text-muted hover:text-ink dark:hover:text-[#e8efe9]"
                   )}
@@ -184,7 +207,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
               <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-faint">
                 Priority
               </label>
-              <Select value={priority} onValueChange={(v) => push({ priority: v as Priority })}>
+              <Select value={task.priority} onValueChange={(v) => push({ priority: v as Priority })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Priority" />
                 </SelectTrigger>
@@ -202,7 +225,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
                 Project
               </label>
               <Select
-                value={projectId ?? "none"}
+                value={task.project_id ?? "none"}
                 onValueChange={(v) => push({ project_id: v === "none" ? null : v })}
               >
                 <SelectTrigger>
@@ -249,14 +272,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
             <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-faint">
               Description
             </label>
-            <textarea
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-              onBlur={() => push({ description: desc })}
-              rows={6}
-              placeholder="Add a description…"
-              className="input resize-y"
-            />
+            <TaskDescriptionField taskId={task.id} initial={task.description} />
           </div>
 
           <div>

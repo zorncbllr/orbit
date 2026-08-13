@@ -1,4 +1,4 @@
-import React, { Component, type ErrorInfo, type ReactNode } from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { useStore } from "./lib/store";
@@ -8,15 +8,6 @@ declare global {
   interface Window {
     __orbitDiag?: (msg: string) => void;
   }
-}
-
-window.__orbitDiag?.("app: main.tsx module evaluated");
-try {
-  window.__orbitDiag?.(
-    "app: ls=" + String(localStorage.getItem("orbit-settings")).slice(0, 200)
-  );
-} catch (e) {
-  window.__orbitDiag?.("app: ls error " + String(e));
 }
 
 class ErrorBoundary extends Component<
@@ -64,11 +55,9 @@ class ErrorBoundary extends Component<
 
 try {
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-    <React.StrictMode>
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
-    </React.StrictMode>
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   );
   window.__orbitDiag?.("app: React rendered");
 } catch (e) {
