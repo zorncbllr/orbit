@@ -11,6 +11,20 @@ database — no account, no cloud, no internet required.
 
 One source of truth. Multiple useful views.
 
+## Screenshots
+
+| Home | Tasks |
+| ---- | ----- |
+| <img src="screenshots/Screenshot_13-Aug_17-38-17_178.png" alt="Home" width="420" /> | <img src="screenshots/Screenshot_13-Aug_17-38-30_2821.png" alt="Tasks" width="420" /> |
+
+| Notes | Kanban |
+| ----- | ------ |
+| <img src="screenshots/Screenshot_13-Aug_17-38-42_9111.png" alt="Notes" width="420" /> | <img src="screenshots/Screenshot_13-Aug_17-38-54_25416.png" alt="Kanban" width="420" /> |
+
+| Calendar | Projects | Settings |
+| -------- | -------- | -------- |
+| <img src="screenshots/Screenshot_13-Aug_17-39-06_20473.png" alt="Calendar" width="420" /> | <img src="screenshots/Screenshot_13-Aug_17-39-17_10715.png" alt="Projects" width="420" /> | <img src="screenshots/Screenshot_13-Aug_17-39-31_25132.png" alt="Settings" width="420" /> |
+
 ## Tech stack
 
 - **Tauri 2** (Rust shell + SQLite via `tauri-plugin-sql`)
