@@ -15,15 +15,15 @@ One source of truth. Multiple useful views.
 
 | Home | Tasks |
 | ---- | ----- |
-| <img src="screenshots/Screenshot_13-Aug_17-38-17_178.png" alt="Home" width="420" /> | <img src="screenshots/Screenshot_13-Aug_17-38-30_2821.png" alt="Tasks" width="420" /> |
+| <img src="screenshots/Screenshot_14-Aug_02-33-28_11720.png" alt="Home" width="420" /> | <img src="screenshots/Screenshot_14-Aug_02-33-57_23801.png" alt="Tasks" width="420" /> |
 
 | Notes | Kanban |
 | ----- | ------ |
-| <img src="screenshots/Screenshot_13-Aug_17-38-42_9111.png" alt="Notes" width="420" /> | <img src="screenshots/Screenshot_13-Aug_17-38-54_25416.png" alt="Kanban" width="420" /> |
+| <img src="screenshots/Screenshot_14-Aug_02-34-08_18171.png" alt="Notes" width="420" /> | <img src="screenshots/Screenshot_14-Aug_02-34-33_24654.png" alt="Kanban" width="420" /> |
 
 | Calendar | Projects | Settings |
 | -------- | -------- | -------- |
-| <img src="screenshots/Screenshot_13-Aug_17-39-06_20473.png" alt="Calendar" width="420" /> | <img src="screenshots/Screenshot_13-Aug_17-39-17_10715.png" alt="Projects" width="420" /> | <img src="screenshots/Screenshot_13-Aug_17-39-31_25132.png" alt="Settings" width="420" /> |
+| <img src="screenshots/Screenshot_14-Aug_02-34-47_19619.png" alt="Calendar" width="420" /> | <img src="screenshots/Screenshot_14-Aug_02-34-56_18411.png" alt="Projects" width="420" /> | <img src="screenshots/Screenshot_14-Aug_02-35-06_7006.png" alt="Settings" width="420" /> |
 
 ## Tech stack
 
