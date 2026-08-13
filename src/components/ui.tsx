@@ -34,7 +34,7 @@ export function Modal({
       />
       <div
         className={cn(
-          "relative z-10 w-full overflow-hidden rounded-xl border border-line bg-surface shadow-sm shadow-ink/5 dark:border-line-dark dark:bg-surface-dark-card dark:shadow-black/10",
+          "relative z-10 w-full overflow-hidden rounded-xl border border-line bg-surface shadow-md dark:border-line-dark dark:bg-surface-dark-card",
           width
         )}
       >

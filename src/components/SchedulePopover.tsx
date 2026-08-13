@@ -36,7 +36,7 @@ export default function SchedulePopover({
     <>
       <div className="fixed inset-0 z-[60]" onClick={onClose} />
       <div
-        className="fixed z-[61] w-[360px] rounded-xl border border-line bg-surface shadow-xl shadow-ink/10 dark:border-line-dark dark:bg-surface-dark-card"
+        className="fixed z-[61] w-[360px] rounded-xl border border-line bg-surface shadow-md dark:border-line-dark dark:bg-surface-dark-card"
         style={{ left, top }}
       >
         <div className="max-h-[70vh] overflow-y-auto p-3">
