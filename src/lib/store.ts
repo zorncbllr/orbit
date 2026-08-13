@@ -4,6 +4,7 @@ import {
   isPermissionGranted,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
+import { join, resourceDir } from "@tauri-apps/api/path";
 import {
   dbExecute,
   dbSelect,
@@ -856,6 +857,17 @@ export async function moveOverdueToBacklog() {
   });
 }
 
+let notifIcon: string | undefined;
+async function notificationIcon(): Promise<string | undefined> {
+  if (notifIcon !== undefined) return notifIcon;
+  try {
+    notifIcon = await join(await resourceDir(), "icons/app-icon.png");
+  } catch {
+    notifIcon = undefined;
+  }
+  return notifIcon;
+}
+
 export function tickNotifications() {
   void moveOverdueToBacklog();
   const { notif, tasks, events, notified, markNotified } = useStore.getState();
@@ -868,7 +880,7 @@ export function tickNotifications() {
     try {
       const granted = await isPermissionGranted();
       if (granted) {
-        sendNotification({ title, body });
+        sendNotification({ title, body, icon: await notificationIcon() });
       }
     } catch {
       /* not running inside Tauri */
