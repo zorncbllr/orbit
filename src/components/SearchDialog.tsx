@@ -24,6 +24,7 @@ export default function SearchDialog() {
   const projects = useStore((s) => s.projects);
   const events = useStore((s) => s.events);
   const navigate = useStore((s) => s.navigate);
+  const openTask = useStore((s) => s.openTask);
   const toast = useStore((s) => s.toast);
 
   const [query, setQuery] = useState("");
@@ -77,7 +78,7 @@ export default function SearchDialog() {
     setOpen(false);
     switch (r.type) {
       case "task":
-        navigate("tasks", { taskId: r.id });
+        openTask(r.id);
         break;
       case "note":
         navigate("notes", { noteId: r.id });

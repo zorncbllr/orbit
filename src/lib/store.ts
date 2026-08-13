@@ -78,6 +78,8 @@ interface StoreState extends PersistedState {
 
   loadAll: () => Promise<void>;
   navigate: (page: PageName, params?: NavParams) => void;
+  openTask: (id: string) => void;
+  closeTask: () => void;
   setSearchOpen: (open: boolean) => void;
   setTheme: (theme: ThemeSetting) => void;
   setNotif: (patch: Partial<NotifSettings>) => void;
@@ -328,6 +330,14 @@ export const useStore = create<StoreState>()((set, get) => ({
           lastProjectId: params.projectId ?? "",
         });
       },
+      openTask: (id) =>
+        set((s) => ({ params: { ...s.params, taskId: id }, searchOpen: false })),
+      closeTask: () =>
+        set((s) => {
+          const params = { ...s.params };
+          delete params.taskId;
+          return { params };
+        }),
       setSearchOpen: (searchOpen) => set({ searchOpen }),
       setTheme: (theme) => {
         set({ theme });

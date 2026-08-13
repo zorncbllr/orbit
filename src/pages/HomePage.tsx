@@ -18,6 +18,7 @@ export default function HomePage() {
   const projects = useStore((s) => s.projects);
   const events = useStore((s) => s.events);
   const navigate = useStore((s) => s.navigate);
+  const openTask = useStore((s) => s.openTask);
   const updateTask = useStore((s) => s.updateTask);
 
   const projectOf = useMemo(() => {
@@ -268,7 +269,7 @@ export default function HomePage() {
                   onToggle={() =>
                     updateTask(t.id, { status: t.status === "done" ? "todo" : "done" })
                   }
-                  onOpen={() => navigate("tasks", { taskId: t.id })}
+                  onOpen={() => openTask(t.id)}
                 />
               ))
             );

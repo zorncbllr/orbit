@@ -79,7 +79,7 @@ export default function CalendarPage() {
   const projects = useStore((s) => s.projects);
   const updateTask = useStore((s) => s.updateTask);
   const updateEvent = useStore((s) => s.updateEvent);
-  const navigate = useStore((s) => s.navigate);
+  const openTask = useStore((s) => s.openTask);
   const params = useStore((s) => s.params);
   const ui = useStore((s) => s.ui);
   const setUi = useStore((s) => s.setUi);
@@ -110,7 +110,7 @@ export default function CalendarPage() {
   };
 
   const openChip = (c: Chip) => {
-    if (c.kind === "task") navigate("tasks", { taskId: c.id });
+    if (c.kind === "task") openTask(c.id);
     else {
       const ev = events.find((e) => e.id === c.id);
       if (ev) setEventModal({ mode: "edit", event: ev });
@@ -335,7 +335,7 @@ export default function CalendarPage() {
                   scheduled_start: ms,
                   scheduled_end: ms + 60 * MINUTE_MS,
                 });
-                navigate("tasks", { taskId: id });
+                openTask(id);
               }}
             />
           )}

@@ -15,6 +15,7 @@ export default function ProjectPage({ id }: { id: string }) {
   const allNotes = useStore((s) => s.notes);
   const allEvents = useStore((s) => s.events);
   const navigate = useStore((s) => s.navigate);
+  const openTask = useStore((s) => s.openTask);
   const updateTask = useStore((s) => s.updateTask);
 
   const [tab, setTab] = useState<Tab>("overview");
@@ -156,7 +157,7 @@ export default function ProjectPage({ id }: { id: string }) {
                       onToggle={() =>
                         updateTask(t.id, { status: t.status === "done" ? "todo" : "done" })
                       }
-                      onOpen={() => navigate("tasks", { taskId: t.id })}
+                      onOpen={() => openTask(t.id)}
                     />
                   ))}
                   {tasks.length > 6 && (
@@ -181,7 +182,7 @@ export default function ProjectPage({ id }: { id: string }) {
                     <div
                       key={t.id}
                       className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-[12.5px] text-ink-soft transition-colors hover:bg-surface-soft dark:text-[#cfd9d2] dark:hover:bg-surface-dark"
-                      onClick={() => navigate("tasks", { taskId: t.id })}
+                      onClick={() => openTask(t.id)}
                     >
                       <CalendarClock className="h-3.5 w-3.5 shrink-0 text-br" />
                       <span className="truncate">{t.title}</span>
@@ -239,7 +240,7 @@ export default function ProjectPage({ id }: { id: string }) {
                       onToggle={() =>
                         updateTask(t.id, { status: t.status === "done" ? "todo" : "done" })
                       }
-                      onOpen={() => navigate("tasks", { taskId: t.id })}
+                      onOpen={() => openTask(t.id)}
                     />
                   ))}
               </div>

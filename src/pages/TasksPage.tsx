@@ -31,7 +31,7 @@ function taskDayKey(ts: number | null): string | null {
 export default function TasksPage() {
   const tasks = useStore((s) => s.tasks);
   const projects = useStore((s) => s.projects);
-  const navigate = useStore((s) => s.navigate);
+  const openTask = useStore((s) => s.openTask);
   const updateTask = useStore((s) => s.updateTask);
   const ui = useStore((s) => s.ui);
   const setUi = useStore((s) => s.setUi);
@@ -70,8 +70,6 @@ export default function TasksPage() {
     for (const p of projects) m.set(p.id, p);
     return m;
   }, [projects]);
-
-  const openTask = (id: string) => navigate("tasks", { taskId: id });
 
   const today = startOfDay(new Date()).getTime();
   const weekStart = startOfWeek(new Date()).getTime();

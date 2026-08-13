@@ -45,6 +45,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
   const tasks = useStore((s) => s.tasks);
   const notes = useStore((s) => s.notes);
   const navigate = useStore((s) => s.navigate);
+  const closeTask = useStore((s) => s.closeTask);
   const params = useStore((s) => s.params);
 
   const [title, setTitle] = useState("");
@@ -78,7 +79,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
     return (
       <div className="fixed inset-y-0 right-0 z-40 w-[420px] border-l border-line bg-surface p-6 dark:border-line-dark dark:bg-surface-dark-card">
         <button
-          onClick={() => navigate("tasks", {})}
+          onClick={closeTask}
           className="btn btn-ghost"
         >
           <X className="h-4 w-4" /> Close
@@ -123,7 +124,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
           Task
         </span>
         <button
-          onClick={() => navigate("tasks", {})}
+          onClick={closeTask}
           aria-label="Close"
           className="rounded-md p-1 text-muted transition-colors hover:bg-surface-soft hover:text-ink dark:hover:bg-surface-dark"
         >
@@ -449,7 +450,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
         onConfirm={() => {
           deleteTask(task.id);
           setConfirmDelete(false);
-          if (params.taskId === task.id) navigate("tasks", {});
+          if (params.taskId === task.id) closeTask();
         }}
         onCancel={() => setConfirmDelete(false)}
       />

@@ -11,7 +11,7 @@ import {
 import type { TaskStatus } from "../lib/types";
 
 function KanbanCard({ task }: { task: TaskWithExtras }) {
-  const navigate = useStore((s) => s.navigate);
+  const openTask = useStore((s) => s.openTask);
   const project = useStore((s) => s.projects.find((p) => p.id === task.project_id));
   const overdue = isOverdue(task);
 
@@ -23,7 +23,7 @@ function KanbanCard({ task }: { task: TaskWithExtras }) {
         e.dataTransfer.setData("text/plain", task.id);
         e.dataTransfer.effectAllowed = "move";
       }}
-      onClick={() => navigate("tasks", { taskId: task.id })}
+      onClick={() => openTask(task.id)}
       className="group mb-2 cursor-grab rounded-lg border border-line bg-surface px-3 py-2.5 shadow-sm transition-all hover:border-br/60 dark:border-line-dark dark:bg-surface-dark-card"
     >
       <p className="text-[13px] leading-snug text-ink dark:text-[#e8efe9]">
