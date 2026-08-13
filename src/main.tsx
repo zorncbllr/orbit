@@ -7,6 +7,15 @@ import "./styles.css";
 declare global {
   interface Window {
     __orbitDiag?: (msg: string) => void;
+    __TAURI_INTERNALS__?: {
+      invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
+      event: {
+        listen: (
+          event: string,
+          handler: (event: unknown) => void
+        ) => Promise<() => void>;
+      };
+    };
   }
 }
 

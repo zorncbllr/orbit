@@ -28,7 +28,7 @@ export default function Layout() {
 
   return (
     <aside className="flex w-52 shrink-0 flex-col border-r border-line bg-surface dark:border-line-dark dark:bg-surface-dark-card">
-      <div className="flex items-center gap-2 px-4 pb-1 pt-4">
+      <div data-tauri-drag-region className="flex cursor-default select-none items-center gap-2 px-4 pb-1 pt-4">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-br">
           <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 text-white" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <ellipse cx="12" cy="12" rx="9" ry="5" transform="rotate(-20 12 12)" />

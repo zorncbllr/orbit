@@ -38,7 +38,11 @@ pub fn run() {
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_window_state::Builder::new().with_state_flags(StateFlags::all()).build())
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(StateFlags::all().difference(StateFlags::DECORATIONS))
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![log_diag, write_file, read_file, copy_file])
         .run(tauri::generate_context!())
         .expect("error while running Orbit");

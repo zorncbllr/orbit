@@ -15,6 +15,7 @@ import ProjectsPage from "./pages/ProjectsPage";
 import ProjectPage from "./pages/ProjectPage";
 import SettingsPage from "./pages/SettingsPage";
 import TaskDrawer from "./components/TaskDrawer";
+import WindowControls from "./components/WindowControls";
 import { focusQuickAdd } from "./components/QuickAdd";
 import type { PageName } from "./lib/store";
 
@@ -156,40 +157,46 @@ export default function App() {
 
   if (!loaded) {
     return (
-      <div className="flex h-full">
-        <Layout />
-        <main className="min-w-0 flex-1 overflow-hidden">
-          <AppShellSkeleton />
-        </main>
-      </div>
+      <>
+        <WindowControls />
+        <div className="flex h-full">
+          <Layout />
+          <main className="min-w-0 flex-1 overflow-hidden pt-11">
+            <AppShellSkeleton />
+          </main>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="flex h-full">
-      <Layout />
-      <main className="min-w-0 flex-1 overflow-hidden">
-        {page === "home" && (skeletonPage === "home" ? <PageSkeleton page="home" /> : <MemoHomePage />)}
-        {page === "tasks" && (skeletonPage === "tasks" ? <PageSkeleton page="tasks" /> : <MemoTasksPage />)}
-        {page === "notes" && (skeletonPage === "notes" ? <PageSkeleton page="notes" /> : <MemoNotesPage />)}
-        {page === "kanban" && (skeletonPage === "kanban" ? <PageSkeleton page="kanban" /> : <MemoKanbanPage />)}
-        {page === "calendar" && (skeletonPage === "calendar" ? <PageSkeleton page="calendar" /> : <MemoCalendarPage />)}
-        {page === "projects" && (skeletonPage === "projects" ? <PageSkeleton page="projects" /> : <MemoProjectsPage />)}
-        {page === "project" &&
-          params.projectId &&
-          (skeletonPage === "project" ? <PageSkeleton page="project" /> : <MemoProjectPage id={params.projectId} />)}
-        {page === "settings" && (skeletonPage === "settings" ? <PageSkeleton page="settings" /> : <MemoSettingsPage />)}
-      </main>
-      <div
-        className={cn(
-          "flex h-full shrink-0 flex-col overflow-hidden transition-[width] duration-80",
-          drawerOpen ? "w-[440px] ease-out" : "w-0 ease-in"
-        )}
-      >
-        {drawerTaskId && <TaskDrawer key={drawerTaskId} taskId={drawerTaskId} />}
+    <>
+      <WindowControls />
+      <div className="flex h-full">
+        <Layout />
+        <main className="min-w-0 flex-1 overflow-hidden pt-11">
+          {page === "home" && (skeletonPage === "home" ? <PageSkeleton page="home" /> : <MemoHomePage />)}
+          {page === "tasks" && (skeletonPage === "tasks" ? <PageSkeleton page="tasks" /> : <MemoTasksPage />)}
+          {page === "notes" && (skeletonPage === "notes" ? <PageSkeleton page="notes" /> : <MemoNotesPage />)}
+          {page === "kanban" && (skeletonPage === "kanban" ? <PageSkeleton page="kanban" /> : <MemoKanbanPage />)}
+          {page === "calendar" && (skeletonPage === "calendar" ? <PageSkeleton page="calendar" /> : <MemoCalendarPage />)}
+          {page === "projects" && (skeletonPage === "projects" ? <PageSkeleton page="projects" /> : <MemoProjectsPage />)}
+          {page === "project" &&
+            params.projectId &&
+            (skeletonPage === "project" ? <PageSkeleton page="project" /> : <MemoProjectPage id={params.projectId} />)}
+          {page === "settings" && (skeletonPage === "settings" ? <PageSkeleton page="settings" /> : <MemoSettingsPage />)}
+        </main>
+        <div
+          className={cn(
+            "flex h-full shrink-0 flex-col overflow-hidden pt-11 transition-[width] duration-80",
+            drawerOpen ? "w-[440px] ease-out" : "w-0 ease-in"
+          )}
+        >
+          {drawerTaskId && <TaskDrawer key={drawerTaskId} taskId={drawerTaskId} />}
+        </div>
+        <SearchDialog />
+        <Toasts />
       </div>
-      <SearchDialog />
-      <Toasts />
-    </div>
+    </>
   );
 }
