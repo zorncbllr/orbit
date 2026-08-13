@@ -276,6 +276,19 @@ export const useStore = create<StoreState>()((set, get) => ({
           depMap.set(d.task_id, list);
         }
 
+        const backfilled = defaultTaskTimes();
+        const backfillTasks = tasks.map((task) =>
+          task.scheduled_start == null && task.scheduled_end == null
+            ? { ...task, scheduled_start: backfilled.start, scheduled_end: backfilled.end }
+            : task
+        );
+        if (tasks.some((task) => task.scheduled_start == null && task.scheduled_end == null)) {
+          await dbExecute(
+            "UPDATE tasks SET scheduled_start = ?, scheduled_end = ? WHERE scheduled_start IS NULL AND scheduled_end IS NULL",
+            [backfilled.start, backfilled.end]
+          );
+        }
+
         const ui = get().ui;
         let page: PageName = "home";
         let params: NavParams = {};
@@ -295,7 +308,7 @@ export const useStore = create<StoreState>()((set, get) => ({
           projects,
           notes,
           events,
-          tasks: tasks.map((t) => ({
+          tasks: backfillTasks.map((t) => ({
             ...t,
             subtasks: subtaskMap.get(t.id) ?? [],
             dependencies: depMap.get(t.id) ?? [],
@@ -357,6 +370,13 @@ export const useStore = create<StoreState>()((set, get) => ({
       createTask: async (input) => {
         const id = newId();
         const t = now();
+        const times =
+          input.scheduled_start != null || input.scheduled_end != null
+            ? {
+                start: input.scheduled_start ?? null,
+                end: input.scheduled_end ?? null,
+              }
+            : defaultTaskTimes();
         await dbExecute(
           `INSERT INTO tasks (id, title, description, status, priority, project_id, scheduled_start, scheduled_end, due_at, created_at, updated_at)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
@@ -367,8 +387,8 @@ export const useStore = create<StoreState>()((set, get) => ({
             input.status ?? "todo",
             input.priority ?? "medium",
             input.project_id ?? null,
-            input.scheduled_start ?? null,
-            input.scheduled_end ?? null,
+            times.start,
+            times.end,
             input.due_at ?? null,
             t,
             t,
@@ -381,8 +401,8 @@ export const useStore = create<StoreState>()((set, get) => ({
           status: input.status ?? "todo",
           priority: input.priority ?? "medium",
           due_at: input.due_at ?? null,
-          scheduled_start: input.scheduled_start ?? null,
-          scheduled_end: input.scheduled_end ?? null,
+          scheduled_start: times.start,
+          scheduled_end: times.end,
           estimated_duration: null,
           project_id: input.project_id ?? null,
           created_at: t,
@@ -434,6 +454,10 @@ export const useStore = create<StoreState>()((set, get) => ({
         if (!src) return null;
         const newIdStr = newId();
         const t = now();
+        const times =
+          src.scheduled_start != null || src.scheduled_end != null
+            ? { start: src.scheduled_start, end: src.scheduled_end }
+            : defaultTaskTimes();
         await dbExecute(
           `INSERT INTO tasks (id, title, description, status, priority, project_id, scheduled_start, scheduled_end, due_at, estimated_duration, created_at, updated_at)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -444,8 +468,8 @@ export const useStore = create<StoreState>()((set, get) => ({
             src.status,
             src.priority,
             src.project_id,
-            src.scheduled_start,
-            src.scheduled_end,
+            times.start,
+            times.end,
             src.due_at,
             src.estimated_duration,
             t,
@@ -461,6 +485,8 @@ export const useStore = create<StoreState>()((set, get) => ({
         const task: TaskWithExtras = {
           ...src,
           id: newIdStr,
+          scheduled_start: times.start,
+          scheduled_end: times.end,
           created_at: t,
           updated_at: t,
           subtasks: src.subtasks.map((s) => ({ ...s, id: newId(), task_id: newIdStr })),

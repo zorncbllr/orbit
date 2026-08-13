@@ -70,7 +70,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
     setSchedStart(toInputValue(task.scheduled_start));
     setSchedEnd(toInputValue(task.scheduled_end));
     setDuration(task.estimated_duration ? String(task.estimated_duration) : "");
-  }, [task?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [task]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { updateTask, deleteTask, duplicateTask } = useStore.getState();
 
