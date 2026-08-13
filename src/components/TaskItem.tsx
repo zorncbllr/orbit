@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { CalendarClock, Circle, CircleCheck, ListChecks } from "lucide-react";
 import { useStore, type TaskWithExtras } from "../lib/store";
 import type { Project } from "../lib/types";
-import { cn, formatTime, isOverdue, relativeTime } from "../lib/utils";
+import { cn, formatTime, isOverdue, relativeTime, STATUS_LABELS } from "../lib/utils";
 import SchedulePopover from "./SchedulePopover";
 
 export default function TaskItem({
@@ -104,7 +104,7 @@ export default function TaskItem({
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           {overdue && (
             <span className="chip bg-coral/10 text-coral">
-              <CalendarClock className="h-3 w-3" /> Overdue
+              <CalendarClock className="h-3 w-3" /> {STATUS_LABELS[task.status as keyof typeof STATUS_LABELS]}
             </span>
           )}
           {timeLabel && (

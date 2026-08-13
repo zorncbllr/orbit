@@ -44,6 +44,7 @@ function KanbanCard({ task }: { task: TaskWithExtras }) {
         )}
         {task.due_at && (
           <span className={cn("chip", overdue ? "bg-coral/10 text-coral" : "text-muted")}>
+            {overdue && <span className="text-coral">{STATUS_LABELS[task.status as keyof typeof STATUS_LABELS]}</span>}
             {formatShort(new Date(task.due_at))}
           </span>
         )}
