@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowDownUp, Filter, ListTodo } from "lucide-react";
 import { useStore, type TaskWithExtras } from "../lib/store";
 import {
@@ -33,14 +33,37 @@ export default function TasksPage() {
   const projects = useStore((s) => s.projects);
   const navigate = useStore((s) => s.navigate);
   const updateTask = useStore((s) => s.updateTask);
+  const ui = useStore((s) => s.ui);
+  const setUi = useStore((s) => s.setUi);
 
-  const [tab, setTab] = useState<Tab>("today");
-  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState<Tab>(() => (ui.tasksTab as Tab) ?? "today");
+  const [search, setSearch] = useState(
+    () => (ui.tasksSearch as string) ?? ""
+  );
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [fStatus, setFStatus] = useState<"" | TaskStatus>("");
-  const [fPriority, setFPriority] = useState<"" | Priority>("");
-  const [fProject, setFProject] = useState("");
-  const [sortBy, setSortBy] = useState<"due" | "created" | "priority" | "title">("due");
+  const [fStatus, setFStatus] = useState<"" | TaskStatus>(
+    () => ((ui.tasksStatus as "" | TaskStatus) ?? "")
+  );
+  const [fPriority, setFPriority] = useState<"" | Priority>(
+    () => ((ui.tasksPriority as "" | Priority) ?? "")
+  );
+  const [fProject, setFProject] = useState(
+    () => (ui.tasksProject as string) ?? ""
+  );
+  const [sortBy, setSortBy] = useState<"due" | "created" | "priority" | "title">(
+    () => ((ui.tasksSort as "due" | "created" | "priority" | "title") ?? "due")
+  );
+
+  useEffect(() => {
+    setUi({
+      tasksTab: tab,
+      tasksSearch: search,
+      tasksStatus: fStatus,
+      tasksPriority: fPriority,
+      tasksProject: fProject,
+      tasksSort: sortBy,
+    });
+  }, [tab, search, fStatus, fPriority, fProject, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const projectOf = useMemo(() => {
     const m = new Map<string, (typeof projects)[number]>();

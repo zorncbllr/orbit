@@ -81,14 +81,24 @@ export default function CalendarPage() {
   const updateEvent = useStore((s) => s.updateEvent);
   const navigate = useStore((s) => s.navigate);
   const params = useStore((s) => s.params);
+  const ui = useStore((s) => s.ui);
+  const setUi = useStore((s) => s.setUi);
 
-  const [view, setView] = useState<View>("month");
-  const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
+  const [view, setView] = useState<View>(
+    () => ((ui.calendarView as View) ?? "month")
+  );
+  const [anchor, setAnchor] = useState(
+    () => new Date((ui.calendarAnchor as number) ?? startOfDay(new Date()).getTime())
+  );
   const [eventModal, setEventModal] = useState<
     { mode: "create"; day: Date } | { mode: "edit"; event: Event } | null
   >(null);
   const [newTaskAt, setNewTaskAt] = useState<number | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setUi({ calendarView: view, calendarAnchor: anchor.getTime() });
+  }, [view, anchor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const today = startOfDay(new Date()).getTime();
   const chips = useMemo(() => buildChips(tasks, events), [tasks, events]);

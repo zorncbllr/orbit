@@ -93,6 +93,37 @@ export async function dbExecute(sql: string, params: unknown[] = []): Promise<vo
   await d.execute(sql, params);
 }
 
+export interface SettingsRow {
+  key: string;
+  value: string;
+}
+
+export async function loadAllSettings(): Promise<Record<string, string>> {
+  const rows = await dbSelect<SettingsRow>("SELECT key, value FROM settings");
+  const out: Record<string, string> = {};
+  for (const r of rows) out[r.key] = r.value;
+  return out;
+}
+
+export async function saveSettings(
+  entries: Array<{ key: string; value: string }>
+): Promise<void> {
+  const d = await initDb();
+  for (const e of entries) {
+    await d.execute(
+      "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      [e.key, e.value]
+    );
+  }
+}
+
+export async function deleteSettings(keys: string[]): Promise<void> {
+  const d = await initDb();
+  for (const k of keys) {
+    await d.execute("DELETE FROM settings WHERE key = ?", [k]);
+  }
+}
+
 export async function dbSelect<T>(sql: string, params: unknown[] = []): Promise<T[]> {
   const d = await initDb();
   return d.select<T[]>(sql, params);

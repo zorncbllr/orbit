@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { appDataDir } from "@tauri-apps/api/path";
+import { appConfigDir } from "@tauri-apps/api/path";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   isPermissionGranted,
@@ -86,7 +86,12 @@ export default function SettingsPage() {
       task_dependencies: s.tasks.flatMap((t) =>
         t.dependencies.map((d) => ({ task_id: t.id, depends_on_task_id: d }))
       ),
-      settings: { theme: s.theme, notif: s.notif },
+      settings: {
+        theme: s.theme,
+        notif: s.notif,
+        notified: s.notified,
+        ui: s.ui,
+      },
     };
     set("export");
     try {
@@ -130,7 +135,7 @@ export default function SettingsPage() {
   const backupDb = async () => {
     set("backup");
     try {
-      const dir = await appDataDir();
+      const dir = await appConfigDir();
       const dest = await save({
         defaultPath: `orbit-db-${new Date().toISOString().slice(0, 10)}.db`,
         filters: [{ name: "SQLite", extensions: ["db"] }],

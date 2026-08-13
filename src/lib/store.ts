@@ -1,10 +1,16 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import {
   isPermissionGranted,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
-import { dbExecute, dbSelect, newId, now } from "./db";
+import {
+  dbExecute,
+  dbSelect,
+  loadAllSettings,
+  newId,
+  now,
+  saveSettings,
+} from "./db";
 import {
   HOUR_MS,
   MINUTE_MS,
@@ -55,6 +61,7 @@ interface PersistedState {
   theme: ThemeSetting;
   notif: NotifSettings;
   notified: Record<string, number>;
+  ui: Record<string, string | number>;
 }
 
 interface StoreState extends PersistedState {
@@ -74,6 +81,7 @@ interface StoreState extends PersistedState {
   setSearchOpen: (open: boolean) => void;
   setTheme: (theme: ThemeSetting) => void;
   setNotif: (patch: Partial<NotifSettings>) => void;
+  setUi: (patch: Record<string, string | number>) => void;
   toast: (message: string, type?: Toast["type"]) => void;
   dismissToast: (id: number) => void;
   markNotified: (key: string) => void;
@@ -134,6 +142,80 @@ const DEFAULT_NOTIF: NotifSettings = {
   events: true,
 };
 
+const RESTORABLE_PAGES: PageName[] = [
+  "home",
+  "tasks",
+  "notes",
+  "kanban",
+  "calendar",
+  "projects",
+  "settings",
+];
+
+function persistPatch(patch: Partial<PersistedState>): Promise<void> {
+  const entries = (Object.entries(patch) as Array<[keyof PersistedState, unknown]>).map(
+    ([key, value]) => ({ key, value: JSON.stringify(value) })
+  );
+  return saveSettings(entries).catch(() => {
+    /* persistence is best-effort */
+  });
+}
+
+let uiTimer: ReturnType<typeof setTimeout> | null = null;
+function persistUi(ui: Record<string, string | number>) {
+  if (uiTimer) clearTimeout(uiTimer);
+  uiTimer = setTimeout(() => persistPatch({ ui }), 250);
+}
+
+function readLegacySettings(): Partial<PersistedState> | null {
+  try {
+    const raw = localStorage.getItem("orbit-settings");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const st = parsed?.state;
+    if (!st || typeof st !== "object") return null;
+    return {
+      theme: (st.theme as ThemeSetting) ?? "system",
+      notif: { ...DEFAULT_NOTIF, ...(st.notif ?? {}) },
+      notified: (st.notified as Record<string, number>) ?? {},
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function readPersistedState(): Promise<PersistedState> {
+  const rows = await loadAllSettings();
+  const parse = <T>(v: string | undefined, fb: T): T => {
+    if (!v) return fb;
+    try {
+      return JSON.parse(v) as T;
+    } catch {
+      return fb;
+    }
+  };
+  const persisted: PersistedState = {
+    theme: parse<ThemeSetting>(rows.theme, "system"),
+    notif: parse<NotifSettings>(rows.notif, DEFAULT_NOTIF),
+    notified: parse<Record<string, number>>(rows.notified, {}),
+    ui: parse<Record<string, string | number>>(rows.ui, {}),
+  };
+  if (!rows.theme) {
+    const legacy = readLegacySettings();
+    if (legacy) {
+      const merged: PersistedState = {
+        theme: legacy.theme ?? persisted.theme,
+        notif: legacy.notif ?? persisted.notif,
+        notified: legacy.notified ?? persisted.notified,
+        ui: persisted.ui,
+      };
+      persistPatch(merged);
+      return merged;
+    }
+  }
+  return persisted;
+}
+
 function patchTaskIn(
   tasks: TaskWithExtras[],
   id: string,
@@ -144,9 +226,7 @@ function patchTaskIn(
   );
 }
 
-export const useStore = create<StoreState>()(
-  persist(
-    (set, get) => ({
+export const useStore = create<StoreState>()((set, get) => ({
       loaded: false,
       projects: [],
       tasks: [],
@@ -155,12 +235,22 @@ export const useStore = create<StoreState>()(
       theme: "system",
       notif: DEFAULT_NOTIF,
       notified: {},
+      ui: {},
       page: "home",
       params: {},
       searchOpen: false,
       toasts: [],
 
       loadAll: async () => {
+        const persisted = await readPersistedState();
+        set({
+          theme: persisted.theme,
+          notif: persisted.notif,
+          notified: persisted.notified,
+          ui: persisted.ui,
+        });
+        applyTheme(persisted.theme);
+
         const [projects, tasks, subtasks, deps, notes, events] =
           await Promise.all([
             dbSelect<Project>("SELECT * FROM projects ORDER BY created_at ASC"),
@@ -186,6 +276,21 @@ export const useStore = create<StoreState>()(
           depMap.set(d.task_id, list);
         }
 
+        const ui = get().ui;
+        let page: PageName = "home";
+        let params: NavParams = {};
+        const lastPage = ui.lastPage as PageName | undefined;
+        if (lastPage && (RESTORABLE_PAGES as string[]).includes(lastPage)) {
+          page = lastPage;
+        } else if (lastPage === "project") {
+          const pid =
+            typeof ui.lastProjectId === "string" ? ui.lastProjectId : null;
+          if (pid && projects.some((p) => p.id === pid)) {
+            page = "project";
+            params = { projectId: pid };
+          }
+        }
+
         set({
           projects,
           notes,
@@ -195,6 +300,8 @@ export const useStore = create<StoreState>()(
             subtasks: subtaskMap.get(t.id) ?? [],
             dependencies: depMap.get(t.id) ?? [],
           })),
+          page,
+          params,
           loaded: true,
         });
         get().pruneNotified();
@@ -203,13 +310,27 @@ export const useStore = create<StoreState>()(
       navigate: (page, params = {}) => {
         window.__orbitDiag?.("nav: -> " + page + " " + JSON.stringify(params));
         set({ page, params, searchOpen: false });
+        get().setUi({
+          lastPage: page,
+          lastProjectId: params.projectId ?? "",
+        });
       },
       setSearchOpen: (searchOpen) => set({ searchOpen }),
       setTheme: (theme) => {
         set({ theme });
         applyTheme(theme);
+        persistPatch({ theme });
       },
-      setNotif: (patch) => set({ notif: { ...get().notif, ...patch } }),
+      setNotif: (patch) => {
+        const notif = { ...get().notif, ...patch };
+        set({ notif });
+        persistPatch({ notif });
+      },
+      setUi: (patch) => {
+        const ui = { ...get().ui, ...patch };
+        set({ ui });
+        persistUi(ui);
+      },
       toast: (message, type = "info") => {
         const id = Date.now() + Math.random();
         set({ toasts: [...get().toasts, { id, message, type }] });
@@ -221,6 +342,7 @@ export const useStore = create<StoreState>()(
         const notified = { ...get().notified };
         notified[key] = now();
         set({ notified });
+        persistPatch({ notified });
       },
       pruneNotified: () => {
         const cutoff = now() - 7 * 86400000;
@@ -229,6 +351,7 @@ export const useStore = create<StoreState>()(
           if (notified[k] < cutoff) delete notified[k];
         }
         set({ notified });
+        persistPatch({ notified });
       },
 
       createTask: async (input) => {
@@ -604,21 +727,31 @@ export const useStore = create<StoreState>()(
             [d.task_id, d.depends_on_task_id]
           );
         }
+        const s = payload.settings;
+        if (s && typeof s === "object") {
+          const imported = s as unknown as Partial<PersistedState>;
+          const setImported = (patch: Partial<PersistedState>) => {
+            if (patch.theme) set({ theme: patch.theme });
+            if (patch.notif) set({ notif: { ...DEFAULT_NOTIF, ...patch.notif } });
+            if (patch.notified) set({ notified: patch.notified });
+            if (patch.ui) set({ ui: { ...patch.ui } });
+          };
+          setImported({
+            theme: imported.theme,
+            notif: imported.notif,
+            notified: imported.notified,
+            ui: imported.ui,
+          });
+          await persistPatch({
+            theme: get().theme,
+            notif: get().notif,
+            notified: get().notified,
+            ui: get().ui,
+          });
+        }
         await get().loadAll();
       },
-    }),
-    {
-      name: "orbit-settings",
-      partialize: (s): PersistedState => ({
-        theme: s.theme,
-        notif: s.notif,
-        notified: s.notified,
-      }),
-      onRehydrateStorage: () => (state) => {
-        if (state) applyTheme(state.theme);
-      },
-    }
-  )
+    })
 );
 
 export function applyTheme(theme: ThemeSetting) {

@@ -1,10 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import KanbanBoard from "../components/KanbanBoard";
 import { useStore } from "../lib/store";
 
 export default function KanbanPage() {
-  const [projectId, setProjectId] = useState<string>("all");
+  const ui = useStore((s) => s.ui);
+  const setUi = useStore((s) => s.setUi);
+  const [projectId, setProjectId] = useState<string>(
+    () => (ui.kanbanProject as string) ?? "all"
+  );
   const projects = useStore((s) => s.projects);
+
+  useEffect(() => {
+    setUi({ kanbanProject: projectId });
+  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex h-full flex-col">
