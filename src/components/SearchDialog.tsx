@@ -126,10 +126,10 @@ export default function SearchDialog() {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[18vh]">
       <div
-        className="absolute inset-0 bg-ink/30 backdrop-blur-[2px] dark:bg-black/50"
+        className="absolute inset-0 bg-ink/5 backdrop-blur-[2px] dark:bg-black/10"
         onClick={() => setOpen(false)}
       />
-      <div className="relative z-10 w-full max-w-xl overflow-hidden rounded-xl border border-line bg-surface shadow-2xl dark:border-line-dark dark:bg-surface-dark-card">
+      <div className="relative z-10 w-full max-w-xl overflow-hidden rounded-xl border border-line bg-surface shadow-sm shadow-ink/5 dark:border-line-dark dark:bg-surface-dark-card dark:shadow-black/10">
         <div className="flex items-center gap-2.5 border-b border-line px-4 py-3 dark:border-line-dark">
           <Search className="h-4 w-4 shrink-0 text-muted" />
           <input

@@ -29,12 +29,12 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div
-        className="absolute inset-0 bg-ink/30 backdrop-blur-[2px] dark:bg-black/50"
+        className="absolute inset-0 bg-ink/5 backdrop-blur-[2px] dark:bg-black/10"
         onClick={onClose}
       />
       <div
         className={cn(
-          "relative z-10 w-full overflow-hidden rounded-xl border border-line bg-surface shadow-xl shadow-ink/10 dark:border-line-dark dark:bg-surface-dark-card",
+          "relative z-10 w-full overflow-hidden rounded-xl border border-line bg-surface shadow-sm shadow-ink/5 dark:border-line-dark dark:bg-surface-dark-card dark:shadow-black/10",
           width
         )}
       >
