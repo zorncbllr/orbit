@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Orbit</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      window.__orbitDiag = function (msg) {
+        try {
+          window.__TAURI_INTERNALS__.invoke("log_diag", { message: msg }).catch(function () {});
+        } catch (e) {}
+      };
+      window.addEventListener("error", function (e) {
+        window.__orbitDiag("window.onerror: " + (e && e.message ? e.message : String(e)));
+      });
+      window.addEventListener("unhandledrejection", function (e) {
+        window.__orbitDiag("unhandledrejection: " + String(e && e.reason));
+      });
+      window.__orbitDiag("boot: inline script ran");
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

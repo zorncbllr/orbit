@@ -1,0 +1,709 @@
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import {
+  isPermissionGranted,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
+import { dbExecute, dbSelect, newId, now } from "./db";
+import {
+  HOUR_MS,
+  MINUTE_MS,
+  addDays,
+  endOfDay,
+  startOfDay,
+  startOfWeek,
+} from "./utils";
+import type {
+  Event,
+  ExportPayload,
+  NotifSettings,
+  Note,
+  Priority,
+  Project,
+  Subtask,
+  Task,
+  TaskStatus,
+  ThemeSetting,
+} from "./types";
+
+export type PageName =
+  | "home"
+  | "tasks"
+  | "notes"
+  | "kanban"
+  | "calendar"
+  | "projects"
+  | "project"
+  | "settings";
+
+export interface NavParams {
+  taskId?: string;
+  projectId?: string;
+  noteId?: string;
+  eventId?: string;
+}
+
+export type TaskWithExtras = Task & { subtasks: Subtask[]; dependencies: string[] };
+
+export interface Toast {
+  id: number;
+  message: string;
+  type: "info" | "success" | "error";
+}
+
+interface PersistedState {
+  theme: ThemeSetting;
+  notif: NotifSettings;
+  notified: Record<string, number>;
+}
+
+interface StoreState extends PersistedState {
+  loaded: boolean;
+  projects: Project[];
+  tasks: TaskWithExtras[];
+  notes: Note[];
+  events: Event[];
+
+  page: PageName;
+  params: NavParams;
+  searchOpen: boolean;
+  toasts: Toast[];
+
+  loadAll: () => Promise<void>;
+  navigate: (page: PageName, params?: NavParams) => void;
+  setSearchOpen: (open: boolean) => void;
+  setTheme: (theme: ThemeSetting) => void;
+  setNotif: (patch: Partial<NotifSettings>) => void;
+  toast: (message: string, type?: Toast["type"]) => void;
+  dismissToast: (id: number) => void;
+  markNotified: (key: string) => void;
+  pruneNotified: () => void;
+
+  // tasks
+  createTask: (input: {
+    title: string;
+    project_id?: string | null;
+    status?: TaskStatus;
+    priority?: Priority;
+    scheduled_start?: number | null;
+    scheduled_end?: number | null;
+    due_at?: number | null;
+  }) => Promise<string>;
+  updateTask: (id: string, patch: Partial<Task>) => Promise<void>;
+  deleteTask: (id: string) => Promise<void>;
+  duplicateTask: (id: string) => Promise<string | null>;
+  addSubtask: (taskId: string, title: string) => Promise<void>;
+  toggleSubtask: (taskId: string, subtaskId: string) => Promise<void>;
+  removeSubtask: (taskId: string, subtaskId: string) => Promise<void>;
+  setDependencies: (taskId: string, deps: string[]) => Promise<void>;
+
+  // projects
+  createProject: (input: { name: string; description?: string }) => Promise<string>;
+  updateProject: (id: string, patch: Partial<Project>) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
+
+  // notes
+  createNote: (input: {
+    title?: string;
+    content?: string;
+    project_id?: string | null;
+    task_id?: string | null;
+  }) => Promise<string>;
+  updateNote: (id: string, patch: Partial<Note>) => Promise<void>;
+  deleteNote: (id: string) => Promise<void>;
+
+  // events
+  createEvent: (input: {
+    title: string;
+    start_at: number;
+    end_at: number;
+    project_id?: string | null;
+  }) => Promise<string>;
+  updateEvent: (id: string, patch: Partial<Event>) => Promise<void>;
+  deleteEvent: (id: string) => Promise<void>;
+
+  importPayload: (payload: ExportPayload) => Promise<void>;
+}
+
+const DEFAULT_NOTIF: NotifSettings = {
+  enabled: true,
+  remindMinutes: 30,
+  taskScheduled: true,
+  taskDue: true,
+  taskOverdue: true,
+  events: true,
+};
+
+function patchTaskIn(
+  tasks: TaskWithExtras[],
+  id: string,
+  patch: Partial<Task>
+): TaskWithExtras[] {
+  return tasks.map((t) =>
+    t.id === id ? { ...t, ...patch, updated_at: now() } : t
+  );
+}
+
+export const useStore = create<StoreState>()(
+  persist(
+    (set, get) => ({
+      loaded: false,
+      projects: [],
+      tasks: [],
+      notes: [],
+      events: [],
+      theme: "system",
+      notif: DEFAULT_NOTIF,
+      notified: {},
+      page: "home",
+      params: {},
+      searchOpen: false,
+      toasts: [],
+
+      loadAll: async () => {
+        const [projects, tasks, subtasks, deps, notes, events] =
+          await Promise.all([
+            dbSelect<Project>("SELECT * FROM projects ORDER BY created_at ASC"),
+            dbSelect<Task>("SELECT * FROM tasks ORDER BY created_at ASC"),
+            dbSelect<Subtask>("SELECT * FROM subtasks ORDER BY created_at ASC"),
+            dbSelect<{ task_id: string; depends_on_task_id: string }>(
+              "SELECT * FROM task_dependencies"
+            ),
+            dbSelect<Note>("SELECT * FROM notes ORDER BY updated_at DESC"),
+            dbSelect<Event>("SELECT * FROM events ORDER BY start_at ASC"),
+          ]);
+
+        const subtaskMap = new Map<string, Subtask[]>();
+        for (const s of subtasks) {
+          const list = subtaskMap.get(s.task_id) ?? [];
+          list.push(s);
+          subtaskMap.set(s.task_id, list);
+        }
+        const depMap = new Map<string, string[]>();
+        for (const d of deps) {
+          const list = depMap.get(d.task_id) ?? [];
+          list.push(d.depends_on_task_id);
+          depMap.set(d.task_id, list);
+        }
+
+        set({
+          projects,
+          notes,
+          events,
+          tasks: tasks.map((t) => ({
+            ...t,
+            subtasks: subtaskMap.get(t.id) ?? [],
+            dependencies: depMap.get(t.id) ?? [],
+          })),
+          loaded: true,
+        });
+        get().pruneNotified();
+      },
+
+      navigate: (page, params = {}) => {
+        window.__orbitDiag?.("nav: -> " + page + " " + JSON.stringify(params));
+        set({ page, params, searchOpen: false });
+      },
+      setSearchOpen: (searchOpen) => set({ searchOpen }),
+      setTheme: (theme) => {
+        set({ theme });
+        applyTheme(theme);
+      },
+      setNotif: (patch) => set({ notif: { ...get().notif, ...patch } }),
+      toast: (message, type = "info") => {
+        const id = Date.now() + Math.random();
+        set({ toasts: [...get().toasts, { id, message, type }] });
+        setTimeout(() => get().dismissToast(id), 3200);
+      },
+      dismissToast: (id) =>
+        set({ toasts: get().toasts.filter((t) => t.id !== id) }),
+      markNotified: (key) => {
+        const notified = { ...get().notified };
+        notified[key] = now();
+        set({ notified });
+      },
+      pruneNotified: () => {
+        const cutoff = now() - 7 * 86400000;
+        const notified = { ...get().notified };
+        for (const k of Object.keys(notified)) {
+          if (notified[k] < cutoff) delete notified[k];
+        }
+        set({ notified });
+      },
+
+      createTask: async (input) => {
+        const id = newId();
+        const t = now();
+        await dbExecute(
+          `INSERT INTO tasks (id, title, description, status, priority, project_id, scheduled_start, scheduled_end, due_at, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+          [
+            id,
+            input.title,
+            "",
+            input.status ?? "todo",
+            input.priority ?? "medium",
+            input.project_id ?? null,
+            input.scheduled_start ?? null,
+            input.scheduled_end ?? null,
+            input.due_at ?? null,
+            t,
+            t,
+          ]
+        );
+        const task: TaskWithExtras = {
+          id,
+          title: input.title,
+          description: "",
+          status: input.status ?? "todo",
+          priority: input.priority ?? "medium",
+          due_at: input.due_at ?? null,
+          scheduled_start: input.scheduled_start ?? null,
+          scheduled_end: input.scheduled_end ?? null,
+          estimated_duration: null,
+          project_id: input.project_id ?? null,
+          created_at: t,
+          updated_at: t,
+          subtasks: [],
+          dependencies: [],
+        };
+        set({ tasks: [...get().tasks, task] });
+        return id;
+      },
+
+      updateTask: async (id, patch) => {
+        const allowed: (keyof Task)[] = [
+          "title",
+          "description",
+          "status",
+          "priority",
+          "due_at",
+          "scheduled_start",
+          "scheduled_end",
+          "estimated_duration",
+          "project_id",
+        ];
+        const cols = allowed.filter((k) => k in patch);
+        if (cols.length === 0) return;
+        const sets = cols.map((c) => `${c} = ?`).join(", ");
+        const vals = cols.map((c) =>
+          patch[c as keyof Task] === undefined ? null : patch[c as keyof Task]
+        ) as unknown[];
+        await dbExecute(
+          `UPDATE tasks SET ${sets}, updated_at = ? WHERE id = ?`,
+          [...vals, now(), id]
+        );
+        set({ tasks: patchTaskIn(get().tasks, id, patch) });
+      },
+
+      deleteTask: async (id) => {
+        await dbExecute("DELETE FROM tasks WHERE id = ?", [id]);
+        set({
+          tasks: get().tasks.filter((t) => t.id !== id),
+          notes: get().notes.map((n) =>
+            n.task_id === id ? { ...n, task_id: null } : n
+          ),
+        });
+      },
+
+      duplicateTask: async (id) => {
+        const src = get().tasks.find((t) => t.id === id);
+        if (!src) return null;
+        const newIdStr = newId();
+        const t = now();
+        await dbExecute(
+          `INSERT INTO tasks (id, title, description, status, priority, project_id, scheduled_start, scheduled_end, due_at, estimated_duration, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [
+            newIdStr,
+            src.title,
+            src.description,
+            src.status,
+            src.priority,
+            src.project_id,
+            src.scheduled_start,
+            src.scheduled_end,
+            src.due_at,
+            src.estimated_duration,
+            t,
+            t,
+          ]
+        );
+        for (const s of src.subtasks) {
+          await dbExecute(
+            `INSERT INTO subtasks (id, task_id, title, completed, created_at) VALUES (?,?,?,?,?)`,
+            [newId(), newIdStr, s.title, s.completed ? 1 : 0, t]
+          );
+        }
+        const task: TaskWithExtras = {
+          ...src,
+          id: newIdStr,
+          created_at: t,
+          updated_at: t,
+          subtasks: src.subtasks.map((s) => ({ ...s, id: newId(), task_id: newIdStr })),
+          dependencies: [],
+        };
+        set({ tasks: [...get().tasks, task] });
+        return newIdStr;
+      },
+
+      addSubtask: async (taskId, title) => {
+        const id = newId();
+        const t = now();
+        await dbExecute(
+          "INSERT INTO subtasks (id, task_id, title, completed, created_at) VALUES (?,?,?,0,?)",
+          [id, taskId, title, t]
+        );
+        set({
+          tasks: get().tasks.map((task) =>
+            task.id === taskId
+              ? {
+                  ...task,
+                  updated_at: t,
+                  subtasks: [
+                    ...task.subtasks,
+                    { id, task_id: taskId, title, completed: false, created_at: t },
+                  ],
+                }
+              : task
+          ),
+        });
+      },
+
+      toggleSubtask: async (taskId, subtaskId) => {
+        const task = get().tasks.find((t) => t.id === taskId);
+        const sub = task?.subtasks.find((s) => s.id === subtaskId);
+        if (!task || !sub) return;
+        const completed = !sub.completed;
+        await dbExecute(
+          "UPDATE subtasks SET completed = ? WHERE id = ?",
+          [completed ? 1 : 0, subtaskId]
+        );
+        set({
+          tasks: get().tasks.map((t) =>
+            t.id === taskId
+              ? {
+                  ...t,
+                  updated_at: now(),
+                  subtasks: t.subtasks.map((s) =>
+                    s.id === subtaskId ? { ...s, completed } : s
+                  ),
+                }
+              : t
+          ),
+        });
+      },
+
+      removeSubtask: async (taskId, subtaskId) => {
+        await dbExecute("DELETE FROM subtasks WHERE id = ?", [subtaskId]);
+        set({
+          tasks: get().tasks.map((t) =>
+            t.id === taskId
+              ? {
+                  ...t,
+                  updated_at: now(),
+                  subtasks: t.subtasks.filter((s) => s.id !== subtaskId),
+                }
+              : t
+          ),
+        });
+      },
+
+      setDependencies: async (taskId, deps) => {
+        await dbExecute("DELETE FROM task_dependencies WHERE task_id = ?", [taskId]);
+        for (const dep of deps) {
+          if (dep === taskId) continue;
+          await dbExecute(
+            "INSERT OR IGNORE INTO task_dependencies (task_id, depends_on_task_id) VALUES (?,?)",
+            [taskId, dep]
+          );
+        }
+        set({
+          tasks: get().tasks.map((t) =>
+            t.id === taskId ? { ...t, dependencies: deps.filter((d) => d !== taskId) } : t
+          ),
+        });
+      },
+
+      createProject: async (input) => {
+        const id = newId();
+        const t = now();
+        await dbExecute(
+          "INSERT INTO projects (id, name, description, status, created_at, updated_at) VALUES (?,?,?,'active',?,?)",
+          [id, input.name, input.description ?? "", t, t]
+        );
+        const project: Project = {
+          id,
+          name: input.name,
+          description: input.description ?? "",
+          color: null,
+          status: "active",
+          created_at: t,
+          updated_at: t,
+        };
+        set({ projects: [...get().projects, project] });
+        return id;
+      },
+
+      updateProject: async (id, patch) => {
+        const allowed: (keyof Project)[] = ["name", "description", "color", "status"];
+        const cols = allowed.filter((k) => k in patch);
+        if (cols.length === 0) return;
+        const sets = cols.map((c) => `${c} = ?`).join(", ");
+        const vals = cols.map((c) => patch[c as keyof Project]) as unknown[];
+        await dbExecute(
+          `UPDATE projects SET ${sets}, updated_at = ? WHERE id = ?`,
+          [...vals, now(), id]
+        );
+        set({
+          projects: get().projects.map((p) =>
+            p.id === id ? { ...p, ...patch, updated_at: now() } : p
+          ),
+        });
+      },
+
+      deleteProject: async (id) => {
+        await dbExecute("DELETE FROM projects WHERE id = ?", [id]);
+        set({
+          projects: get().projects.filter((p) => p.id !== id),
+          tasks: get().tasks.map((t) =>
+            t.project_id === id ? { ...t, project_id: null, updated_at: now() } : t
+          ),
+          notes: get().notes.map((n) =>
+            n.project_id === id ? { ...n, project_id: null } : n
+          ),
+          events: get().events.map((e) =>
+            e.project_id === id ? { ...e, project_id: null } : e
+          ),
+        });
+      },
+
+      createNote: async (input) => {
+        const id = newId();
+        const t = now();
+        await dbExecute(
+          "INSERT INTO notes (id, title, content, project_id, task_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+          [id, input.title ?? "", input.content ?? "", input.project_id ?? null, input.task_id ?? null, t, t]
+        );
+        const note: Note = {
+          id,
+          title: input.title ?? "",
+          content: input.content ?? "",
+          project_id: input.project_id ?? null,
+          task_id: input.task_id ?? null,
+          created_at: t,
+          updated_at: t,
+        };
+        set({ notes: [note, ...get().notes] });
+        return id;
+      },
+
+      updateNote: async (id, patch) => {
+        const allowed: (keyof Note)[] = ["title", "content", "project_id", "task_id"];
+        const cols = allowed.filter((k) => k in patch);
+        if (cols.length === 0) return;
+        const sets = cols.map((c) => `${c} = ?`).join(", ");
+        const vals = cols.map((c) => patch[c as keyof Note]) as unknown[];
+        await dbExecute(
+          `UPDATE notes SET ${sets}, updated_at = ? WHERE id = ?`,
+          [...vals, now(), id]
+        );
+        set({
+          notes: get()
+            .notes.map((n) => (n.id === id ? { ...n, ...patch, updated_at: now() } : n))
+            .sort((a, b) => b.updated_at - a.updated_at),
+        });
+      },
+
+      deleteNote: async (id) => {
+        await dbExecute("DELETE FROM notes WHERE id = ?", [id]);
+        set({ notes: get().notes.filter((n) => n.id !== id) });
+      },
+
+      createEvent: async (input) => {
+        const id = newId();
+        const t = now();
+        await dbExecute(
+          "INSERT INTO events (id, title, description, start_at, end_at, project_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+          [id, input.title, "", input.start_at, input.end_at, input.project_id ?? null, t, t]
+        );
+        const ev: Event = {
+          id,
+          title: input.title,
+          description: "",
+          start_at: input.start_at,
+          end_at: input.end_at,
+          project_id: input.project_id ?? null,
+          created_at: t,
+          updated_at: t,
+        };
+        set({ events: [...get().events, ev].sort((a, b) => a.start_at - b.start_at) });
+        return id;
+      },
+
+      updateEvent: async (id, patch) => {
+        const allowed: (keyof Event)[] = ["title", "description", "start_at", "end_at", "project_id"];
+        const cols = allowed.filter((k) => k in patch);
+        if (cols.length === 0) return;
+        const sets = cols.map((c) => `${c} = ?`).join(", ");
+        const vals = cols.map((c) => patch[c as keyof Event]) as unknown[];
+        await dbExecute(
+          `UPDATE events SET ${sets}, updated_at = ? WHERE id = ?`,
+          [...vals, now(), id]
+        );
+        set({
+          events: get()
+            .events.map((e) => (e.id === id ? { ...e, ...patch, updated_at: now() } : e))
+            .sort((a, b) => a.start_at - b.start_at),
+        });
+      },
+
+      deleteEvent: async (id) => {
+        await dbExecute("DELETE FROM events WHERE id = ?", [id]);
+        set({ events: get().events.filter((e) => e.id !== id) });
+      },
+
+      importPayload: async (payload) => {
+        for (const p of payload.projects ?? []) {
+          await dbExecute(
+            `INSERT OR REPLACE INTO projects (id, name, description, color, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?)`,
+            [p.id, p.name, p.description ?? "", p.color ?? null, p.status ?? "active", p.created_at, p.updated_at]
+          );
+        }
+        for (const t of payload.tasks ?? []) {
+          await dbExecute(
+            `INSERT OR REPLACE INTO tasks (id, title, description, status, priority, due_at, scheduled_start, scheduled_end, estimated_duration, project_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [
+              t.id, t.title, t.description ?? "", t.status ?? "todo", t.priority ?? "medium",
+              t.due_at ?? null, t.scheduled_start ?? null, t.scheduled_end ?? null,
+              t.estimated_duration ?? null, t.project_id ?? null, t.created_at, t.updated_at,
+            ]
+          );
+        }
+        for (const s of payload.subtasks ?? []) {
+          await dbExecute(
+            `INSERT OR REPLACE INTO subtasks (id, task_id, title, completed, created_at) VALUES (?,?,?,?,?)`,
+            [s.id, s.task_id, s.title, s.completed ? 1 : 0, s.created_at]
+          );
+        }
+        for (const n of payload.notes ?? []) {
+          await dbExecute(
+            `INSERT OR REPLACE INTO notes (id, title, content, project_id, task_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?)`,
+            [n.id, n.title, n.content ?? "", n.project_id ?? null, n.task_id ?? null, n.created_at, n.updated_at]
+          );
+        }
+        for (const e of payload.events ?? []) {
+          await dbExecute(
+            `INSERT OR REPLACE INTO events (id, title, description, start_at, end_at, project_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)`,
+            [e.id, e.title, e.description ?? "", e.start_at, e.end_at, e.project_id ?? null, e.created_at, e.updated_at]
+          );
+        }
+        for (const d of payload.task_dependencies ?? []) {
+          await dbExecute(
+            `INSERT OR REPLACE INTO task_dependencies (task_id, depends_on_task_id) VALUES (?,?)`,
+            [d.task_id, d.depends_on_task_id]
+          );
+        }
+        await get().loadAll();
+      },
+    }),
+    {
+      name: "orbit-settings",
+      partialize: (s): PersistedState => ({
+        theme: s.theme,
+        notif: s.notif,
+        notified: s.notified,
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state) applyTheme(state.theme);
+      },
+    }
+  )
+);
+
+export function applyTheme(theme: ThemeSetting) {
+  const root = document.documentElement;
+  if (theme === "system") {
+    const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.classList.toggle("dark", dark);
+  } else {
+    root.classList.toggle("dark", theme === "dark");
+  }
+}
+
+export function updateRootBg() {
+  const dark = document.documentElement.classList.contains("dark");
+  const body = document.body.style;
+  body.backgroundColor = dark ? "#151a17" : "#f8faf8";
+}
+
+export function tickNotifications() {
+  const { notif, tasks, events, notified, markNotified } = useStore.getState();
+  if (!notif.enabled) return;
+  const nowTs = now();
+  const windowMs = notif.remindMinutes * MINUTE_MS;
+
+  const fire = async (key: string, title: string, body: string) => {
+    if (notified[key]) return;
+    try {
+      const granted = await isPermissionGranted();
+      if (granted) {
+        sendNotification({ title, body });
+      }
+    } catch {
+      /* not running inside Tauri */
+    }
+    markNotified(key);
+  };
+
+  for (const task of tasks) {
+    if (task.status === "done") continue;
+    if (notif.taskScheduled && task.scheduled_start && task.scheduled_start > nowTs && task.scheduled_start - nowTs <= windowMs) {
+      void fire(`task-sched:${task.id}:${task.scheduled_start}`, "Upcoming task", `"${task.title}" starts soon`);
+    }
+    if (notif.taskDue && task.due_at && task.due_at > nowTs && task.due_at - nowTs <= windowMs) {
+      void fire(`task-due:${task.id}:${task.due_at}`, "Task due soon", `"${task.title}" is due`);
+    }
+    if (notif.taskOverdue && task.due_at && task.due_at < nowTs && task.status !== "blocked") {
+      void fire(`task-overdue:${task.id}`, "Overdue task", `"${task.title}" is overdue`);
+    }
+  }
+
+  for (const ev of events) {
+    if (notif.events && ev.start_at > nowTs && ev.start_at - nowTs <= windowMs) {
+      void fire(`event:${ev.id}:${ev.start_at}`, "Upcoming event", `"${ev.title}" starts soon`);
+    }
+  }
+}
+
+export interface Range {
+  start: number;
+  end: number;
+}
+
+export function todayRange(): Range {
+  return { start: startOfDay(new Date()).getTime(), end: endOfDay(new Date()).getTime() };
+}
+
+export function weekRange(): Range {
+  const s = startOfWeek(new Date());
+  return { start: s.getTime(), end: addDays(s, 7).getTime() - 1 };
+}
+
+export function monthRange(): Range {
+  const d = new Date();
+  const s = new Date(d.getFullYear(), d.getMonth(), 1);
+  const e = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+  return { start: s.getTime(), end: e.getTime() - 1 };
+}
+
+export function hoursFromMinutes(minutes: number): number {
+  return minutes / 60;
+}
+
+export function defaultTaskTimes(): { start: number; end: number } {
+  const d = new Date();
+  d.setHours(9, 0, 0, 0);
+  const start = d.getTime();
+  return { start, end: start + 2 * HOUR_MS };
+}
