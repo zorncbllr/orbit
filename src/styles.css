@@ -34,6 +34,15 @@
 
 .dark {
   color-scheme: dark;
+  --color-ink: #e8efe9;
+  --color-ink-soft: #cfd9d2;
+  --color-muted: #aab8b0;
+  --color-faint: #87968d;
+  --color-line: #2b332e;
+  --color-paper: #151a17;
+  --color-surface: #222a25;
+  --color-surface-soft: #1c231f;
+  --color-br-light: #243328;
 }
 
 html,
@@ -49,11 +58,6 @@ body {
   background: var(--color-paper);
   color: var(--color-ink);
   overflow: hidden;
-}
-
-.dark body {
-  background: var(--color-surface-dark);
-  color: #e8efe9;
 }
 
 ::selection {

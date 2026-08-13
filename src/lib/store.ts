@@ -631,12 +631,6 @@ export function applyTheme(theme: ThemeSetting) {
   }
 }
 
-export function updateRootBg() {
-  const dark = document.documentElement.classList.contains("dark");
-  const body = document.body.style;
-  body.backgroundColor = dark ? "#151a17" : "#f8faf8";
-}
-
 export function tickNotifications() {
   const { notif, tasks, events, notified, markNotified } = useStore.getState();
   if (!notif.enabled) return;

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { initDb } from "./lib/db";
-import { applyTheme, tickNotifications, updateRootBg, useStore } from "./lib/store";
+import { applyTheme, tickNotifications, useStore } from "./lib/store";
 import Layout from "./components/Layout";
 import SearchDialog from "./components/SearchDialog";
 import Toasts from "./components/Toasts";
@@ -63,16 +63,8 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    updateRootBg();
     const interval = window.setInterval(tickNotifications, 60000);
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") updateRootBg();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
+    return () => window.clearInterval(interval);
   }, []);
 
   useEffect(() => {
