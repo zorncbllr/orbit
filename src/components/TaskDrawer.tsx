@@ -5,8 +5,8 @@ import {
   PRIORITY_LABELS,
   STATUS_LABELS,
   cn,
-  formatDateTime,
   relativeTime,
+  relativeDateName,
 } from "../lib/utils";
 import type { Priority, TaskStatus } from "../lib/types";
 import { parseSchedule, scheduleSummary } from "../lib/schedule";
@@ -143,7 +143,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
           {sched && (
             <span className="chip text-muted">
               <CalendarClock className="h-3 w-3" />
-              {formatDateTime(sched.start)} · {new Date(sched.start).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}–{new Date(sched.end).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+              {relativeDateName(sched.start)} · {new Date(sched.start).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}–{new Date(sched.end).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
             </span>
           )}
         </div>

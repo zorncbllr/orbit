@@ -139,6 +139,32 @@ export function relativeTime(ts: number): string {
   return formatDateTime(ts);
 }
 
+export function relativeDateName(ts: number): string {
+  const date = new Date(ts);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
+
+  const diffDays = Math.floor((target.getTime() - today.getTime()) / DAY_MS);
+
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays === -1) return "Yesterday";
+
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const dayName = dayNames[date.getDay()];
+
+  if (diffDays > 0 && diffDays <= 7) {
+    return `Next ${dayName}`;
+  }
+  if (diffDays < 0 && diffDays >= -7) {
+    return `Last ${dayName}`;
+  }
+
+  return formatDateTime(ts);
+}
+
 export function isOverdue(task: Pick<Task, "status" | "due_at" | "scheduled_start">): boolean {
   if (task.status === "done" || task.status === "blocked") return false;
   const ref = task.due_at ?? task.scheduled_start;
