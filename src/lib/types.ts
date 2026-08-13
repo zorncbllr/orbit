@@ -1,4 +1,4 @@
-export type TaskStatus = "todo" | "in_progress" | "done" | "blocked";
+export type TaskStatus = "todo" | "in_progress" | "done" | "backlog";
 export type Priority = "low" | "medium" | "high";
 export type ThemeSetting = "light" | "dark" | "system";
 

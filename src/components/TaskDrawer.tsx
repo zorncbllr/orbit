@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "./ui/select";
 
-const STATUSES: TaskStatus[] = ["todo", "in_progress", "done", "blocked"];
+const STATUSES: TaskStatus[] = ["todo", "in_progress", "done", "backlog"];
 
 export default function TaskDrawer({ taskId }: { taskId: string }) {
   const task = useStore((s) => s.tasks.find((t) => t.id === taskId));

@@ -130,8 +130,8 @@ export default function TaskItem({
           {task.status === "in_progress" && (
             <span className="chip bg-amber/10 text-amber">In progress</span>
           )}
-          {task.status === "blocked" && (
-            <span className="chip bg-coral/10 text-coral">Blocked</span>
+          {task.status === "backlog" && (
+            <span className="chip bg-coral/10 text-coral">Backlog</span>
           )}
           {subtaskTotal > 0 && (
             <span className="chip text-faint">

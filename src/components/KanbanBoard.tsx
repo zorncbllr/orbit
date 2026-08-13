@@ -7,6 +7,8 @@ import {
   cn,
   formatShort,
   isOverdue,
+  matchesDateFilter,
+  type KanbanDateFilter,
 } from "../lib/utils";
 import type { TaskStatus } from "../lib/types";
 import SchedulePopover from "./SchedulePopover";
@@ -100,14 +102,25 @@ function KanbanCard({ task }: { task: TaskWithExtras }) {
   );
 }
 
-export default function KanbanBoard({ projectId }: { projectId?: string }) {
+export default function KanbanBoard({
+  projectId,
+  dateFilter = "all",
+}: {
+  projectId?: string;
+  dateFilter?: KanbanDateFilter;
+}) {
   const allTasks = useStore((s) => s.tasks);
   const createTask = useStore((s) => s.createTask);
   const updateTask = useStore((s) => s.updateTask);
 
   const tasks = useMemo(
-    () => allTasks.filter((t) => (projectId ? t.project_id === projectId : true)),
-    [allTasks, projectId]
+    () =>
+      allTasks.filter(
+        (t) =>
+          (projectId ? t.project_id === projectId : true) &&
+          matchesDateFilter(t, dateFilter)
+      ),
+    [allTasks, projectId, dateFilter]
   );
 
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);

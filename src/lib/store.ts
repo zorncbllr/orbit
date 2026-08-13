@@ -17,6 +17,7 @@ import {
   MINUTE_MS,
   addDays,
   endOfDay,
+  isOverdue,
   startOfDay,
   startOfWeek,
 } from "./utils";
@@ -351,6 +352,7 @@ export const useStore = create<StoreState>()((set, get) => ({
           loaded: true,
         });
         get().pruneNotified();
+        await moveOverdueToBacklog();
       },
 
       navigate: (page, params = {}) => {
@@ -833,7 +835,27 @@ export function applyTheme(theme: ThemeSetting) {
   }
 }
 
+export async function moveOverdueToBacklog() {
+  const { tasks } = useStore.getState();
+  const targets = tasks.filter((t) => t.status === "todo" && isOverdue(t));
+  if (targets.length === 0) return;
+  const ids = targets.map((t) => t.id);
+  const ts = now();
+  const placeholders = ids.map(() => "?").join(", ");
+  await dbExecute(
+    `UPDATE tasks SET status = 'backlog', updated_at = ? WHERE id IN (${placeholders})`,
+    [ts, ...ids]
+  );
+  const idSet = new Set(ids);
+  useStore.setState({
+    tasks: useStore.getState().tasks.map((t) =>
+      idSet.has(t.id) ? { ...t, status: "backlog", updated_at: ts } : t
+    ),
+  });
+}
+
 export function tickNotifications() {
+  void moveOverdueToBacklog();
   const { notif, tasks, events, notified, markNotified } = useStore.getState();
   if (!notif.enabled) return;
   const nowTs = now();
@@ -860,7 +882,7 @@ export function tickNotifications() {
     if (notif.taskDue && task.due_at && task.due_at > nowTs && task.due_at - nowTs <= windowMs) {
       void fire(`task-due:${task.id}:${task.due_at}`, "Task due soon", `"${task.title}" is due`);
     }
-    if (notif.taskOverdue && task.due_at && task.due_at < nowTs && task.status !== "blocked") {
+    if (notif.taskOverdue && task.due_at && task.due_at < nowTs) {
       void fire(`task-overdue:${task.id}`, "Overdue task", `"${task.title}" is overdue`);
     }
   }

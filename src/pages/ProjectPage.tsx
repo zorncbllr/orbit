@@ -37,13 +37,13 @@ export default function ProjectPage({ id }: { id: string }) {
     const done = tasks.filter((t) => t.status === "done").length;
     const inProgress = tasks.filter((t) => t.status === "in_progress").length;
     const todo = tasks.filter((t) => t.status === "todo").length;
-    const blocked = tasks.filter((t) => t.status === "blocked").length;
+    const backlog = tasks.filter((t) => t.status === "backlog").length;
     return {
       total: tasks.length,
       done,
       inProgress,
       todo,
-      blocked,
+      backlog,
       pct: tasks.length === 0 ? 0 : Math.round((done / tasks.length) * 100),
     };
   }, [tasks]);
@@ -131,7 +131,7 @@ export default function ProjectPage({ id }: { id: string }) {
                 { value: stats.total, label: "Total tasks" },
                 { value: stats.done, label: "Completed" },
                 { value: stats.inProgress, label: "In progress" },
-                { value: stats.todo + stats.blocked, label: "Remaining" },
+                { value: stats.todo + stats.backlog, label: "Remaining" },
               ].map((s) => (
                 <div
                   key={s.label}

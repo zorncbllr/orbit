@@ -167,7 +167,7 @@ export function relativeDateName(ts: number): string {
 }
 
 export function isOverdue(task: Pick<Task, "status" | "due_at" | "scheduled_start">): boolean {
-  if (task.status === "done" || task.status === "blocked") return false;
+  if (task.status === "done") return false;
   const ref = task.due_at ?? task.scheduled_start;
   if (!ref) return false;
   return ref < Date.now();
@@ -177,14 +177,39 @@ export function taskStartTime(task: Task): number | null {
   return task.scheduled_start ?? task.due_at;
 }
 
+export type KanbanDateFilter = "all" | "today" | "tomorrow" | "week" | "month";
+
+export const KANBAN_DATE_FILTERS: Array<{ id: KanbanDateFilter; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "today", label: "Today" },
+  { id: "tomorrow", label: "Tomorrow" },
+  { id: "week", label: "This Week" },
+  { id: "month", label: "This Month" },
+];
+
+export function matchesDateFilter(task: Task, filter: KanbanDateFilter): boolean {
+  if (filter === "all") return true;
+  const ref = task.scheduled_start ?? task.due_at;
+  if (!ref) return false;
+  const date = new Date(ref);
+  const now = new Date();
+  if (filter === "today") return isSameDay(date, now);
+  if (filter === "tomorrow") return isSameDay(date, addDays(startOfDay(now), 1));
+  if (filter === "week") {
+    const s = startOfWeek(now);
+    return date.getTime() >= s.getTime() && date.getTime() < addDays(s, 7).getTime();
+  }
+  return isSameMonth(date, now);
+}
+
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: "Todo",
   in_progress: "In Progress",
   done: "Done",
-  blocked: "Blocked",
+  backlog: "Backlog",
 };
 
-export const STATUS_ORDER: TaskStatus[] = ["todo", "in_progress", "done", "blocked"];
+export const STATUS_ORDER: TaskStatus[] = ["todo", "in_progress", "done", "backlog"];
 
 export const PRIORITY_LABELS: Record<string, string> = {
   low: "Low",

@@ -85,6 +85,7 @@ export async function initDb(): Promise<Database> {
   for (const stmt of SCHEMA.split(";").map((s) => s.trim()).filter(Boolean)) {
     await db.execute(stmt);
   }
+  await db.execute("UPDATE tasks SET status = 'backlog' WHERE status = 'blocked'");
   return db;
 }
 
