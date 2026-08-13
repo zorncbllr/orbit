@@ -12,6 +12,7 @@ import {
   isSameDay,
   isSameMonth,
   monthMatrix,
+  relativeDayLabel,
   startOfDay,
   startOfWeek,
 } from "../lib/utils";
@@ -187,19 +188,39 @@ export default function CalendarPage() {
   };
 
   const periodLabel = useMemo(() => {
+    let base: string;
     if (view === "month")
-      return anchor.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-    if (view === "week") {
+      base = anchor.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    else if (view === "week") {
       const s = startOfWeek(anchor);
       const e = addDays(s, 6);
-      return `${s.getDate()} – ${e.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+      base = `${s.getDate()} – ${e.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+    } else {
+      base = anchor.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
     }
-    return anchor.toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
+
+    let rel = "";
+    if (view === "day") {
+      rel = relativeDayLabel(anchor);
+    } else if (view === "week") {
+      const now = startOfWeek(new Date());
+      const diff = Math.round(
+        (startOfWeek(anchor).getTime() - now.getTime()) / (7 * DAY_MS)
+      );
+      rel = diff === 0 ? "This week" : diff === 1 ? "Next week" : diff === -1 ? "Last week" : "";
+    } else {
+      const now = new Date();
+      const diff =
+        (anchor.getFullYear() - now.getFullYear()) * 12 +
+        (anchor.getMonth() - now.getMonth());
+      rel = diff === 0 ? "This month" : diff === 1 ? "Next month" : diff === -1 ? "Last month" : "";
+    }
+    return rel ? `${base} · ${rel}` : base;
   }, [view, anchor]);
 
   const navigatePeriod = (dir: 1 | -1) => {
@@ -322,6 +343,13 @@ export default function CalendarPage() {
               onDropAt={moveToTime}
               onDragStart={recordDrag}
               getDragged={getDragged}
+              onResize={(rec, start, end) => {
+                if (rec.type === "task") {
+                  updateTask(rec.id, { scheduled_start: start, scheduled_end: end });
+                } else {
+                  updateEvent(rec.id, { start_at: start, end_at: end });
+                }
+              }}
               gridRef={gridRef}
               newTaskAt={newTaskAt}
               onRequestNewTask={(ms) => setNewTaskAt(ms)}
@@ -575,6 +603,7 @@ function DayGrid({
   onDropAt,
   onDragStart,
   getDragged,
+  onResize,
   gridRef,
   newTaskAt,
   onRequestNewTask,
@@ -590,6 +619,7 @@ function DayGrid({
   onDropAt: (rec: DragRecord, ms: number) => void;
   onDragStart: (e: React.DragEvent, c: Chip) => void;
   getDragged: (e: React.DragEvent) => DragRecord | null;
+  onResize: (rec: { type: "task" | "event"; id: string }, start: number, end: number) => void;
   gridRef: React.RefObject<HTMLDivElement>;
   newTaskAt: number | null;
   onRequestNewTask: (ms: number) => void;
@@ -597,26 +627,117 @@ function DayGrid({
   onCommitNewTask: (title: string, ms: number) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [scrollTop, setScrollTop] = useState(0);
   const hours = Array.from({ length: HOUR_BOTTOM - HOUR_TOP }, (_, i) => HOUR_TOP + i);
+  const contentHeight = (HOUR_BOTTOM - HOUR_TOP) * HOUR_HEIGHT;
 
-  const clientToTime = (clientY: number): number => {
-    const rect = gridRef.current?.getBoundingClientRect();
-    if (!rect) return anchor.getTime() + 9 * 3600000;
-    const hour = (clientY - rect.top) / HOUR_HEIGHT;
-    const snapped = Math.round(hour * 2) / 2;
-    return anchor.getTime() + snapped * 3600000;
-  };
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const gutterRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<{ id: string; start: number; end: number } | null>(null);
+  const suppressClickRef = useRef(false);
+  const dragOffsetRef = useRef(0);
+
+  const [resize, setResize] = useState<{
+    id: string;
+    kind: "task" | "event";
+    edge: "top" | "bottom";
+    origStart: number;
+    origEnd: number;
+    clientY: number;
+  } | null>(null);
+  const [preview, setPreview] = useState<{ id: string; start: number; end: number } | null>(null);
 
   const isToday = isSameDay(anchor, new Date(today));
   const dayStart = anchor.getTime();
   const dayEnd = dayStart + DAY_MS - 1;
+
+  const snap5 = (ms: number): number =>
+    Math.round(ms / (5 * MINUTE_MS)) * 5 * MINUTE_MS;
+
+  const clientToTime = (clientY: number, offsetMs = 0): number => {
+    const scrollEl = scrollRef.current;
+    const rect = contentRef.current?.getBoundingClientRect();
+    if (!scrollEl || !rect) return anchor.getTime() + 9 * 3600000;
+    const ms = ((clientY - rect.top + scrollEl.scrollTop) / HOUR_HEIGHT) * 3600000 - offsetMs;
+    const snapped = Math.round(ms / (5 * MINUTE_MS)) * 5 * MINUTE_MS;
+    return anchor.getTime() + snapped;
+  };
+
+  const startResize = (
+    e: React.PointerEvent,
+    chip: Chip,
+    edge: "top" | "bottom"
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    suppressClickRef.current = true;
+    previewRef.current = { id: chip.id, start: chip.start, end: chip.end };
+    setPreview(previewRef.current);
+    setResize({
+      id: chip.id,
+      kind: chip.kind,
+      edge,
+      origStart: chip.start,
+      origEnd: chip.end,
+      clientY: e.clientY,
+    });
+  };
+
+  useEffect(() => {
+    if (!resize) return;
+    const onMove = (e: PointerEvent) => {
+      const diff = ((e.clientY - resize.clientY) / HOUR_HEIGHT) * 3600000;
+      let next: { id: string; start: number; end: number };
+      if (resize.edge === "top") {
+        const start = snap5(resize.origStart + diff);
+        const maxStart = resize.origEnd - 30 * MINUTE_MS;
+        next = { id: resize.id, start: Math.min(start, maxStart), end: resize.origEnd };
+      } else {
+        const end = snap5(resize.origEnd + diff);
+        const minEnd = resize.origStart + 30 * MINUTE_MS;
+        next = { id: resize.id, start: resize.origStart, end: Math.max(end, minEnd) };
+      }
+      previewRef.current = next;
+      setPreview(next);
+    };
+    const onUp = () => {
+      const p = previewRef.current;
+      setResize(null);
+      setPreview(null);
+      previewRef.current = null;
+      if (p) onResize({ type: resize.kind, id: resize.id }, p.start, p.end);
+      setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [resize]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const targetHour = isToday ? Math.max(hourOf(Date.now()), 6) : 8;
+    el.scrollTop = Math.max(0, targetHour * HOUR_HEIGHT - 40);
+  }, [anchor]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const sched = chips
     .filter((c) => c.start >= dayStart && c.start <= dayEnd)
-    .map((c) => ({
-      chip: c,
-      top: (hourOf(c.start) - HOUR_TOP) * HOUR_HEIGHT,
-      height: Math.max((c.end - c.start) / 3600000 * HOUR_HEIGHT, 24),
-    }));
+    .map((c) => {
+      const use = preview && preview.id === c.id ? preview : null;
+      const start = use ? use.start : c.start;
+      const end = use ? use.end : c.end;
+      return {
+        chip: c,
+        top: (hourOf(start) - HOUR_TOP) * HOUR_HEIGHT,
+        height: Math.max(((end - start) / 3600000) * HOUR_HEIGHT, 24),
+      };
+    });
 
   return (
     <div className="flex h-full flex-col gap-2">
@@ -638,88 +759,125 @@ function DayGrid({
         onDrop={(e) => {
           e.preventDefault();
           const rec = getDragged(e);
-          if (rec) onDropAt(rec, clientToTime(e.clientY));
+          if (rec) onDropAt(rec, clientToTime(e.clientY, dragOffsetRef.current));
         }}
         onDoubleClick={(e) => onRequestNewTask(clientToTime(e.clientY))}
         className="relative flex-1 overflow-hidden rounded-xl border border-line bg-surface dark:border-line-dark dark:bg-surface-dark-card"
       >
-        <div className="absolute inset-y-0 left-0 w-12">
-          {hours.map((h) => (
+        <div className="flex h-full">
+          <div ref={gutterRef} className="relative w-12 shrink-0 overflow-hidden">
             <div
-              key={h}
-              className="absolute right-2 -translate-y-1/2 text-[9px] tabular-nums text-faint"
-              style={{ top: (h - HOUR_TOP) * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
+              className="absolute inset-x-0 top-0"
+              style={{ height: contentHeight, transform: `translateY(-${scrollTop}px)` }}
             >
-              {h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`}
+              {hours.map((h) => (
+                <div
+                  key={h}
+                  className="absolute right-2 -translate-y-1/2 text-[9px] tabular-nums text-faint"
+                  style={{ top: (h - HOUR_TOP) * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
+                >
+                  {h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className="absolute inset-y-0 left-12 right-0">
-          {hours.map((h) => (
-            <div
-              key={h}
-              className="absolute inset-x-0 border-t border-line/70 dark:border-line-dark/70"
-              style={{ top: (h - HOUR_TOP) * HOUR_HEIGHT, height: HOUR_HEIGHT }}
-            />
-          ))}
-          {isToday && (
-            <div
-              className="absolute inset-x-0 z-10 border-t-2 border-coral/70"
-              style={{ top: (hourOf(Date.now()) - HOUR_TOP) * HOUR_HEIGHT }}
-            >
-              <div className="absolute -left-1.5 -top-1 h-2 w-2 rounded-full bg-coral" />
+          </div>
+          <div
+            ref={scrollRef}
+            onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+            className="relative flex-1 overflow-y-auto"
+          >
+            <div ref={contentRef} className="relative" style={{ height: contentHeight }}>
+              {hours.map((h) => (
+                <div
+                  key={h}
+                  className="absolute inset-x-0 border-t border-line/70 dark:border-line-dark/70"
+                  style={{ top: (h - HOUR_TOP) * HOUR_HEIGHT, height: HOUR_HEIGHT }}
+                />
+              ))}
+              {isToday && (
+                <div
+                  className="absolute inset-x-0 z-10 border-t-2 border-coral/70"
+                  style={{ top: (hourOf(Date.now()) - HOUR_TOP) * HOUR_HEIGHT }}
+                >
+                  <div className="absolute -left-1.5 -top-1 h-2 w-2 rounded-full bg-coral" />
+                </div>
+              )}
+              {sched.map(({ chip, top, height }) => (
+                <div
+                  key={`${chip.kind}-${chip.id}`}
+                  draggable
+                  onDragStart={(e) => {
+                    const contentEl = contentRef.current;
+                    const scrollEl = scrollRef.current;
+                    if (contentEl && scrollEl) {
+                      const rect = contentEl.getBoundingClientRect();
+                      const pointerContentY = e.clientY - rect.top + scrollEl.scrollTop;
+                      const chipTop = (hourOf(chip.start) - HOUR_TOP) * HOUR_HEIGHT;
+                      dragOffsetRef.current =
+                        ((pointerContentY - chipTop) / HOUR_HEIGHT) * 3600000;
+                    }
+                    onDragStart(e, chip);
+                  }}
+                  onClick={() => {
+                    if (suppressClickRef.current) return;
+                    onChipClick(chip);
+                  }}
+                  className="group absolute cursor-pointer overflow-hidden rounded-md border-l-[3px] px-2 py-1 text-[11.5px] leading-tight shadow-sm"
+                  style={{
+                    top,
+                    height,
+                    left: 6,
+                    right: 6,
+                    borderColor: projectColor(chip.projectId, chip.kind),
+                    background: `color-mix(in srgb, ${projectColor(chip.projectId, chip.kind)} 14%, transparent)`,
+                  }}
+                >
+                  <p className="truncate font-medium text-ink dark:text-[#e8efe9]">
+                    {formatTime(chip.start)} · {chip.title}
+                  </p>
+                  <div
+                    onPointerDown={(e) => startResize(e, chip, "top")}
+                    title="Drag to change start time"
+                    className="absolute inset-x-0 top-0 z-10 h-2 cursor-ns-resize touch-none opacity-0 transition-opacity group-hover:opacity-100"
+                  />
+                  <div
+                    onPointerDown={(e) => startResize(e, chip, "bottom")}
+                    title="Drag to change end time"
+                    className="absolute inset-x-0 bottom-0 z-10 h-2 cursor-ns-resize touch-none opacity-0 transition-opacity group-hover:opacity-100"
+                  />
+                </div>
+              ))}
+              {newTaskAt !== null && (
+                <div
+                  className="absolute z-20 px-2"
+                  style={{
+                    top: (hourOf(newTaskAt) - HOUR_TOP) * HOUR_HEIGHT,
+                    left: 8,
+                    right: 8,
+                  }}
+                >
+                  <input
+                    autoFocus
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") onCommitNewTask(draft, newTaskAt);
+                      if (e.key === "Escape") {
+                        setDraft("");
+                        onCancelNewTask();
+                      }
+                    }}
+                    onBlur={() => {
+                      setDraft("");
+                      onCancelNewTask();
+                    }}
+                    placeholder={`New task · ${formatTime(newTaskAt)}`}
+                    className="input rounded-md border-2 border-br px-2 py-1 text-[12.5px] shadow-md"
+                  />
+                </div>
+              )}
             </div>
-          )}
-          {sched.map(({ chip, top, height }) => (
-            <div
-              key={`${chip.kind}-${chip.id}`}
-              draggable
-              onDragStart={(e) => onDragStart(e, chip)}
-              onClick={() => onChipClick(chip)}
-              className="absolute cursor-pointer overflow-hidden rounded-md border-l-[3px] px-2 py-1 text-[11.5px] leading-tight shadow-sm"
-              style={{
-                top,
-                height,
-                left: 6,
-                right: 6,
-                borderColor: projectColor(chip.projectId, chip.kind),
-                background: `color-mix(in srgb, ${projectColor(chip.projectId, chip.kind)} 14%, transparent)`,
-              }}
-            >
-              <p className="truncate font-medium text-ink dark:text-[#e8efe9]">
-                {formatTime(chip.start)} · {chip.title}
-              </p>
-            </div>
-          ))}
-          {newTaskAt !== null && (
-            <div
-              className="absolute z-20 px-2"
-              style={{
-                top: (hourOf(newTaskAt) - HOUR_TOP) * HOUR_HEIGHT,
-                left: 8,
-                right: 8,
-              }}
-            >
-              <input
-                autoFocus
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") onCommitNewTask(draft, newTaskAt);
-                  if (e.key === "Escape") {
-                    setDraft("");
-                    onCancelNewTask();
-                  }
-                }}
-                onBlur={() => {
-                  setDraft("");
-                  onCancelNewTask();
-                }}
-                placeholder={`New task · ${formatTime(newTaskAt)}`}
-                className="input rounded-md border-2 border-br px-2 py-1 text-[12.5px] shadow-md"
-              />
-            </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

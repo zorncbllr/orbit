@@ -83,6 +83,25 @@ export function formatWeekdayShort(d: Date): string {
   return d.toLocaleDateString("en-US", { weekday: "short" });
 }
 
+export function relativeDayLabel(d: Date): string {
+  const today = startOfDay(new Date());
+  const target = startOfDay(d);
+  const diff = Math.round((target.getTime() - today.getTime()) / DAY_MS);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff === -1) return "Yesterday";
+  const thisWeek = startOfWeek(today);
+  const targetWeek = startOfWeek(target);
+  const weekDiff = Math.round(
+    (targetWeek.getTime() - thisWeek.getTime()) / (7 * DAY_MS)
+  );
+  const weekday = d.toLocaleDateString("en-US", { weekday: "long" });
+  if (weekDiff === 0) return `This ${weekday}`;
+  if (weekDiff === 1) return `Next ${weekday}`;
+  if (weekDiff === -1) return `Last ${weekday}`;
+  return diff > 0 ? `In ${diff} days` : `${-diff} days ago`;
+}
+
 export function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString("en-US", {
     hour: "numeric",
