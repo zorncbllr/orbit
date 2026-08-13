@@ -11,6 +11,13 @@ import {
 import type { Priority, TaskStatus } from "../lib/types";
 import { parseSchedule, scheduleSummary } from "../lib/schedule";
 import { ConfirmDialog } from "./ui";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 
 const STATUSES: TaskStatus[] = ["todo", "in_progress", "done", "blocked"];
 
@@ -31,6 +38,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
   const [subtaskInput, setSubtaskInput] = useState("");
   const [nl, setNl] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [depValue, setDepValue] = useState("__add");
 
   useEffect(() => {
     if (!task) return;
@@ -176,37 +184,39 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
               <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-faint">
                 Priority
               </label>
-              <select
-                value={priority}
-                onChange={(e) => push({ priority: e.target.value as Priority })}
-                className="input"
-              >
-                {(["low", "medium", "high"] as Priority[]).map((p) => (
-                  <option key={p} value={p}>
-                    {PRIORITY_LABELS[p]}
-                  </option>
-                ))}
-              </select>
+              <Select value={priority} onValueChange={(v) => push({ priority: v as Priority })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(["low", "medium", "high"] as Priority[]).map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {PRIORITY_LABELS[p]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-faint">
                 Project
               </label>
-              <select
-                value={projectId ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value || null;
-                  push({ project_id: v });
-                }}
-                className="input"
+              <Select
+                value={projectId ?? "none"}
+                onValueChange={(v) => push({ project_id: v === "none" ? null : v })}
               >
-                <option value="">None</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger>
+                  <SelectValue placeholder="Project" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -326,26 +336,28 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
                 );
               })}
             </div>
-            <select
-              className="input mt-2"
-              value=""
-              onChange={(e) => {
-                if (e.target.value) {
-                  useStore
-                    .getState()
-                    .setDependencies(task.id, [...task.dependencies, e.target.value]);
-                }
+            <Select
+              value={depValue}
+              onValueChange={(v) => {
+                useStore
+                  .getState()
+                  .setDependencies(task.id, [...task.dependencies, v]);
+                setDepValue("__add");
               }}
             >
-              <option value="">Add dependency…</option>
-              {depOptions
-                .filter((t) => !task.dependencies.includes(t.id))
-                .map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.title}
-                  </option>
-                ))}
-            </select>
+              <SelectTrigger className="mt-2">
+                <SelectValue placeholder="Add dependency…" />
+              </SelectTrigger>
+              <SelectContent>
+                {depOptions
+                  .filter((t) => !task.dependencies.includes(t.id))
+                  .map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.title}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>

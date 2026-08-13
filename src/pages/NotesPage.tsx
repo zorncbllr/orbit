@@ -16,6 +16,13 @@ import {
 import { useStore } from "../lib/store";
 import { cn, relativeTime } from "../lib/utils";
 import { ConfirmDialog, EmptyState } from "../components/ui";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 
 const toolbars = [
   { icon: Heading2, token: "## " },
@@ -232,47 +239,55 @@ export default function NotesPage() {
               <div className="ml-auto flex items-center gap-3">
                 <label className="flex items-center gap-1.5 text-[11px] text-muted">
                   Project
-                  <select
+                  <Select
                     value={projectId}
-                    onChange={(e) => {
-                      setProjectId(e.target.value);
+                    onValueChange={(v) => {
+                      setProjectId(v);
                       useStore
                         .getState()
                         .updateNote(active.id, {
-                          project_id: e.target.value === "none" ? null : e.target.value,
+                          project_id: v === "none" ? null : v,
                         });
                     }}
-                    className="input w-36 py-1 text-[12px]"
                   >
-                    <option value="none">None</option>
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-36 py-1 text-[12px]">
+                      <SelectValue placeholder="Project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {projects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </label>
                 <label className="flex items-center gap-1.5 text-[11px] text-muted">
                   Task
-                  <select
+                  <Select
                     value={taskId}
-                    onChange={(e) => {
-                      setTaskId(e.target.value);
+                    onValueChange={(v) => {
+                      setTaskId(v);
                       useStore
                         .getState()
                         .updateNote(active.id, {
-                          task_id: e.target.value === "none" ? null : e.target.value,
+                          task_id: v === "none" ? null : v,
                         });
                     }}
-                    className="input w-36 py-1 text-[12px]"
                   >
-                    <option value="none">None</option>
-                    {tasks.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.title.slice(0, 30)}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-36 py-1 text-[12px]">
+                      <SelectValue placeholder="Task" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {tasks.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.title.slice(0, 30)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </label>
                 <span className="text-[10px] text-faint">
                   Markdown

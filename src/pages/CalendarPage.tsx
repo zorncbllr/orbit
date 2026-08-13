@@ -17,6 +17,13 @@ import {
   startOfWeek,
 } from "../lib/utils";
 import { Modal } from "../components/ui";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 
 type View = "month" | "week" | "day";
 
@@ -949,12 +956,20 @@ function EventModal({
         </div>
         <label className="block">
           <span className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-faint">Project</span>
-          <select value={projectId ?? ""} onChange={(e) => setProjectId(e.target.value || null)} className="input">
-            <option value="">None</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+          <Select
+            value={projectId ?? "none"}
+            onValueChange={(v) => setProjectId(v === "none" ? null : v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Project" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
         <label className="block">
           <span className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-faint">Description</span>

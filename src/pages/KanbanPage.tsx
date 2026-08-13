@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import KanbanBoard from "../components/KanbanBoard";
 import { useStore } from "../lib/store";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 
 export default function KanbanPage() {
   const ui = useStore((s) => s.ui);
@@ -28,18 +35,19 @@ export default function KanbanPage() {
           </div>
           <label className="flex items-center gap-2 text-[12px] text-muted">
             Project
-            <select
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              className="input w-44 py-1.5 text-[13px]"
-            >
-              <option value="all">All Projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <Select value={projectId} onValueChange={setProjectId}>
+              <SelectTrigger className="w-44 py-1.5 text-[13px]">
+                <SelectValue placeholder="Project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Projects</SelectItem>
+                {projects.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </label>
         </header>
       </div>

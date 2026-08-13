@@ -1,3 +1,4 @@
+import { twMerge } from "tailwind-merge";
 import type { Task, TaskStatus } from "./types";
 
 export const DAY_MS = 86400000;
@@ -5,7 +6,7 @@ export const HOUR_MS = 3600000;
 export const MINUTE_MS = 60000;
 
 export function cn(...parts: Array<string | false | null | undefined>): string {
-  return parts.filter(Boolean).join(" ");
+  return twMerge(parts.filter(Boolean).join(" "));
 }
 
 export function startOfDay(d: Date): Date {

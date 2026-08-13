@@ -14,6 +14,13 @@ import type { Priority, TaskStatus } from "../lib/types";
 import TaskItem from "../components/TaskItem";
 import QuickAdd from "../components/QuickAdd";
 import { EmptyState } from "../components/ui";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 
 type Tab = "today" | "week" | "month" | "all";
 
@@ -362,16 +369,17 @@ export default function TasksPage() {
                 </button>
                 <div className="flex items-center gap-1">
                   <ArrowDownUp className="h-3.5 w-3.5 text-faint" />
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                    className="input w-36 py-1.5 text-[13px]"
-                  >
-                    <option value="due">Sort: Due date</option>
-                    <option value="created">Sort: Created</option>
-                    <option value="priority">Sort: Priority</option>
-                    <option value="title">Sort: Title</option>
-                  </select>
+                  <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+                    <SelectTrigger className="w-36 py-1.5 text-[13px]">
+                      <SelectValue placeholder="Sort" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="due">Sort: Due date</SelectItem>
+                      <SelectItem value="created">Sort: Created</SelectItem>
+                      <SelectItem value="priority">Sort: Priority</SelectItem>
+                      <SelectItem value="title">Sort: Title</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
@@ -380,48 +388,60 @@ export default function TasksPage() {
               <div className="mb-3 flex flex-wrap gap-3 rounded-lg border border-line bg-surface p-3 dark:border-line-dark dark:bg-surface-dark-card">
                 <label className="flex items-center gap-2 text-[12px] text-muted">
                   Status
-                  <select
-                    value={fStatus}
-                    onChange={(e) => setFStatus(e.target.value as "" | TaskStatus)}
-                    className="input w-32 py-1 text-[13px]"
+                  <Select
+                    value={fStatus || "all"}
+                    onValueChange={(v) => setFStatus(v === "all" ? "" : (v as TaskStatus))}
                   >
-                    <option value="">All</option>
-                    {Object.entries(STATUS_LABELS).map(([k, v]) => (
-                      <option key={k} value={k}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-32 py-1 text-[13px]">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                        <SelectItem key={k} value={k}>
+                          {v}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </label>
                 <label className="flex items-center gap-2 text-[12px] text-muted">
                   Priority
-                  <select
-                    value={fPriority}
-                    onChange={(e) => setFPriority(e.target.value as "" | Priority)}
-                    className="input w-32 py-1 text-[13px]"
+                  <Select
+                    value={fPriority || "all"}
+                    onValueChange={(v) => setFPriority(v === "all" ? "" : (v as Priority))}
                   >
-                    <option value="">All</option>
-                    {Object.entries(PRIORITY_LABELS).map(([k, v]) => (
-                      <option key={k} value={k}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-32 py-1 text-[13px]">
+                      <SelectValue placeholder="Priority" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      {Object.entries(PRIORITY_LABELS).map(([k, v]) => (
+                        <SelectItem key={k} value={k}>
+                          {v}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </label>
                 <label className="flex items-center gap-2 text-[12px] text-muted">
                   Project
-                  <select
-                    value={fProject}
-                    onChange={(e) => setFProject(e.target.value)}
-                    className="input w-40 py-1 text-[13px]"
+                  <Select
+                    value={fProject || "all"}
+                    onValueChange={(v) => setFProject(v === "all" ? "" : v)}
                   >
-                    <option value="">All</option>
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-40 py-1 text-[13px]">
+                      <SelectValue placeholder="Project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      {projects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </label>
                 <button
                   className="btn btn-ghost ml-auto"

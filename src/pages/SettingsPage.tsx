@@ -20,6 +20,13 @@ import {
 import { useStore } from "../lib/store";
 import { cn } from "../lib/utils";
 import type { ExportPayload, ThemeSetting } from "../lib/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 
 type Section = "general" | "appearance" | "notifications" | "shortcuts" | "data" | "about";
 
@@ -343,17 +350,21 @@ export default function SettingsPage() {
                       How far in advance to notify.
                     </p>
                   </div>
-                  <select
-                    value={notif.remindMinutes}
-                    onChange={(e) => setNotif({ remindMinutes: Number(e.target.value) })}
-                    className="input w-28 py-1 text-[13px]"
+                  <Select
+                    value={String(notif.remindMinutes)}
+                    onValueChange={(v) => setNotif({ remindMinutes: Number(v) })}
                   >
-                    {[5, 10, 15, 30, 60, 120].map((m) => (
-                      <option key={m} value={m}>
-                        {m} min
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-28 py-1 text-[13px]">
+                      <SelectValue placeholder="Remind" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[5, 10, 15, 30, 60, 120].map((m) => (
+                        <SelectItem key={m} value={String(m)}>
+                          {m} min
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
