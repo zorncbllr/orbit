@@ -10,7 +10,6 @@ import {
 } from "../lib/utils";
 import type { Priority, TaskStatus } from "../lib/types";
 import { parseSchedule, scheduleSummary } from "../lib/schedule";
-import SchedulePicker from "./SchedulePicker";
 import { ConfirmDialog } from "./ui";
 
 const STATUSES: TaskStatus[] = ["todo", "in_progress", "done", "blocked"];
@@ -221,7 +220,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
                   value={nl}
                   onChange={(e) => setNl(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && applyNl()}
-                  placeholder='Try "fri 3pm to 5pm", "due tomorrow", "next week 10am"…'
+                  placeholder='e.g. "tomorrow 3pm to 5pm"'
                   className="flex-1 bg-transparent text-[13px] text-ink placeholder:text-faint focus:outline-none dark:text-[#e8efe9]"
                 />
                 {nlSummary && (
@@ -233,24 +232,6 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
               {nlSummary && (
                 <p className="text-[11.5px] text-br-deep dark:text-[#a7d3ba]">{nlSummary}</p>
               )}
-              <div className="rounded-lg border border-line p-3 dark:border-line-dark">
-                <SchedulePicker
-                  value={{
-                    due_at: task.due_at,
-                    scheduled_start: task.scheduled_start,
-                    scheduled_end: task.scheduled_end,
-                    estimated_duration: task.estimated_duration,
-                  }}
-                  onChange={(v) =>
-                    push({
-                      due_at: v.due_at,
-                      scheduled_start: v.scheduled_start,
-                      scheduled_end: v.scheduled_end,
-                      estimated_duration: v.estimated_duration,
-                    })
-                  }
-                />
-              </div>
             </div>
           </div>
 
@@ -262,9 +243,9 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
               onBlur={() => push({ description: desc })}
-              rows={3}
+              rows={6}
               placeholder="Add a description…"
-              className="input resize-none"
+              className="input resize-y"
             />
           </div>
 
