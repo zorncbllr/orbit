@@ -58,7 +58,7 @@ export default function SearchDialog() {
     for (const n of notes) {
       if (
         n.title.toLowerCase().includes(q) ||
-        n.content.toLowerCase().includes(q)
+        n.content.replace(/<[^>]*>/g, "").toLowerCase().includes(q)
       )
         push("note", n.id, n.title || "Untitled note", "Note");
     }

@@ -269,7 +269,7 @@ export default function ProjectPage({ id }: { id: string }) {
                       {n.title || "Untitled"}
                     </span>
                     <span className="block truncate text-[12px] text-muted">
-                      {n.content.replace(/[#*`>_-]/g, "").trim().slice(0, 80) || "Empty note"}
+                      {n.content.replace(/<[^>]*>/g, "").trim().slice(0, 80) || "Empty note"}
                     </span>
                   </span>
                   <span className="shrink-0 text-[11px] text-faint">

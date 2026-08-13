@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { marked } from "marked";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bold,
-  Eye,
   FilePlus2,
   Heading2,
   Italic,
@@ -10,8 +8,10 @@ import {
   ListOrdered,
   NotebookPen,
   Quote,
+  Redo2,
   Search,
   Trash2,
+  Undo2,
 } from "lucide-react";
 import { useStore } from "../lib/store";
 import { cn, relativeTime } from "../lib/utils";
@@ -24,14 +24,7 @@ import {
   SelectValue,
 } from "../components/ui/select";
 
-const toolbars = [
-  { icon: Heading2, token: "## " },
-  { icon: Bold, token: "**", wrap: true },
-  { icon: Italic, token: "*", wrap: true },
-  { icon: List, token: "- " },
-  { icon: ListOrdered, token: "1. " },
-  { icon: Quote, token: "> " },
-];
+const toolbarIds = ["h2", "bold", "italic", "ul", "ol", "quote"] as const;
 
 export default function NotesPage() {
   const notes = useStore((s) => s.notes);
@@ -42,12 +35,40 @@ export default function NotesPage() {
 
   const [query, setQuery] = useState("");
   const [editorTitle, setEditorTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [preview, setPreview] = useState(false);
   const [projectId, setProjectId] = useState<string>("none");
   const [taskId, setTaskId] = useState<string>("none");
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [activeFormats, setActiveFormats] = useState<Record<string, boolean>>({});
+  const editorRef = useRef<HTMLDivElement>(null);
+  const loadedNoteIdRef = useRef<string | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  const toolbars = [
+    {
+      id: "h2",
+      icon: Heading2,
+      exec: () =>
+        document.execCommand(
+          "formatBlock",
+          false,
+          getActive()?.h2 ? "p" : "h2"
+        ),
+    },
+    { id: "bold", icon: Bold, exec: () => document.execCommand("bold") },
+    { id: "italic", icon: Italic, exec: () => document.execCommand("italic") },
+    { id: "ul", icon: List, exec: () => document.execCommand("insertUnorderedList") },
+    { id: "ol", icon: ListOrdered, exec: () => document.execCommand("insertOrderedList") },
+    {
+      id: "quote",
+      icon: Quote,
+      exec: () =>
+        document.execCommand(
+          "formatBlock",
+          false,
+          getActive()?.quote ? "p" : "blockquote"
+        ),
+    },
+  ];
 
   const activeId = noteId ?? notes[0]?.id;
 
@@ -57,12 +78,66 @@ export default function NotesPage() {
   );
 
   useEffect(() => {
-    setEditorTitle(active?.title ?? "");
-    setContent(active?.content ?? "");
-    setProjectId(active?.project_id ?? "none");
-    setTaskId(active?.task_id ?? "none");
-    setPreview(false);
+    if (loadedNoteIdRef.current !== active?.id) {
+      loadedNoteIdRef.current = active?.id ?? null;
+      setEditorTitle(active?.title ?? "");
+      setProjectId(active?.project_id ?? "none");
+      setTaskId(active?.task_id ?? "none");
+      setActiveFormats({});
+      if (editorRef.current) editorRef.current.innerHTML = active?.content ?? "";
+    }
   }, [activeId, active?.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const getActive = useCallback((): Record<string, boolean> | null => {
+    const sel = document.getSelection();
+    const el = editorRef.current;
+    if (!el || !sel || sel.rangeCount === 0 || !sel.anchorNode || !el.contains(sel.anchorNode))
+      return null;
+    const active: Record<string, boolean> = {
+      h2: false,
+      bold: false,
+      italic: false,
+      ul: false,
+      ol: false,
+      quote: false,
+    };
+    let n: Node | null = sel.anchorNode;
+    while (n && n !== el && el.contains(n)) {
+      if (n.nodeType === Node.ELEMENT_NODE) {
+        const tag = (n as Element).tagName.toLowerCase();
+        if (tag === "h2") active.h2 = true;
+        if (tag === "b" || tag === "strong") active.bold = true;
+        if (tag === "i" || tag === "em") active.italic = true;
+        if (tag === "ul") active.ul = true;
+        if (tag === "ol") active.ol = true;
+        if (tag === "blockquote") active.quote = true;
+      }
+      n = n.parentNode;
+    }
+    return active;
+  }, []);
+
+  const refreshFormats = useCallback(() => {
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const next = getActive() ?? {};
+      setActiveFormats((prev) => {
+        const changed =
+          Object.keys(next).length !== Object.keys(prev).length ||
+          toolbarIds.some((id) => next[id] !== prev[id]);
+        return changed ? next : prev;
+      });
+    });
+  }, [getActive]);
+
+  useEffect(() => {
+    document.addEventListener("selectionchange", refreshFormats);
+    return () => {
+      document.removeEventListener("selectionchange", refreshFormats);
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [refreshFormats]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -71,7 +146,7 @@ export default function NotesPage() {
       list = list.filter(
         (n) =>
           n.title.toLowerCase().includes(q) ||
-          n.content.toLowerCase().includes(q)
+          n.content.replace(/<[^>]*>/g, "").toLowerCase().includes(q)
       );
     }
     return list;
@@ -94,36 +169,39 @@ export default function NotesPage() {
   };
 
   const saveContent = (c: string) => {
-    setContent(c);
     if (active) useStore.getState().updateNote(active.id, { content: c });
   };
 
-  const applyToken = (token: string, wrap = false) => {
-    const el = textareaRef.current;
-    if (!el) return;
-    const { selectionStart: start, selectionEnd: end } = el;
-    const selected = content.slice(start, end);
-    const next = wrap
-      ? `${token}${selected}${token}`
-      : selected
-        ? `${token}${selected}\n`
-        : token;
-    const nextContent = content.slice(0, start) + next + content.slice(end);
-    saveContent(nextContent);
-    requestAnimationFrame(() => {
-      el.focus();
-      const pos = wrap ? start + token.length : start + next.length;
-      el.setSelectionRange(pos, pos + selected.length);
-    });
+  const applyFormat = (exec: () => boolean) => {
+    if (editorRef.current) editorRef.current.focus();
+    exec();
+    if (editorRef.current) saveContent(editorRef.current.innerHTML);
+    refreshFormats();
   };
 
-  const previewHtml = useMemo(() => {
-    try {
-      return marked.parse(content, { async: false }) as string;
-    } catch {
-      return content;
+  const applyCommand = (command: "undo" | "redo") => {
+    if (editorRef.current) editorRef.current.focus();
+    document.execCommand(command);
+    if (editorRef.current) saveContent(editorRef.current.innerHTML);
+    refreshFormats();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod) return;
+    const k = e.key.toLowerCase();
+    if (k === "h") {
+      e.preventDefault();
+      const h2 = toolbars.find((t) => t.id === "h2");
+      if (h2) applyFormat(h2.exec);
+    } else if (k === "z") {
+      e.preventDefault();
+      applyCommand(e.shiftKey ? "redo" : "undo");
+    } else if (k === "y") {
+      e.preventDefault();
+      applyCommand("redo");
     }
-  }, [content]);
+  };
 
   return (
     <div className="flex h-full">
@@ -206,12 +284,6 @@ export default function NotesPage() {
                 className="flex-1 bg-transparent py-1 text-lg font-medium text-ink placeholder:text-faint focus:outline-none dark:text-[#e8efe9]"
               />
               <button
-                onClick={() => setPreview((p) => !p)}
-                className={cn("btn", preview ? "btn-primary" : "btn-ghost")}
-              >
-                <Eye className="h-4 w-4" /> Preview
-              </button>
-              <button
                 className="btn btn-danger-ghost"
                 onClick={() => setConfirmDelete(true)}
                 aria-label="Delete note"
@@ -222,19 +294,46 @@ export default function NotesPage() {
 
             <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-2 dark:border-line-dark">
               <div className="flex items-center gap-0.5">
-                {toolbars.map(({ icon: Icon, token, wrap }) => (
+                {toolbars.map(({ id, icon: Icon, exec }) => (
                   <button
-                    key={token}
+                    key={id}
                     onMouseDown={(e) => {
                       e.preventDefault();
-                      applyToken(token, wrap);
+                      applyFormat(exec);
                     }}
-                    className="rounded-md p-1.5 text-muted transition-colors hover:bg-surface-soft hover:text-ink dark:hover:bg-surface-dark dark:hover:text-[#e8efe9]"
-                    aria-label={`Insert ${token.trim() || "format"}`}
+                    className={cn(
+                      "rounded-md p-1.5 transition-colors",
+                      activeFormats[id]
+                        ? "bg-br-light text-br-deep dark:bg-br-light-dark dark:text-[#a7d3ba]"
+                        : "text-muted hover:bg-surface-soft hover:text-ink dark:hover:bg-surface-dark dark:hover:text-[#e8efe9]"
+                    )}
+                    aria-label="Format"
                   >
                     <Icon className="h-4 w-4" />
                   </button>
                 ))}
+              </div>
+              <div className="ml-1 flex items-center gap-0.5 border-l border-line pl-1 dark:border-line-dark">
+                <button
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    applyCommand("undo");
+                  }}
+                  className="rounded-md p-1.5 text-muted transition-colors hover:bg-surface-soft hover:text-ink dark:hover:bg-surface-dark dark:hover:text-[#e8efe9]"
+                  aria-label="Undo"
+                >
+                  <Undo2 className="h-4 w-4" />
+                </button>
+                <button
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    applyCommand("redo");
+                  }}
+                  className="rounded-md p-1.5 text-muted transition-colors hover:bg-surface-soft hover:text-ink dark:hover:bg-surface-dark dark:hover:text-[#e8efe9]"
+                  aria-label="Redo"
+                >
+                  <Redo2 className="h-4 w-4" />
+                </button>
               </div>
               <div className="ml-auto flex items-center gap-3">
                 <label className="flex items-center gap-1.5 text-[11px] text-muted">
@@ -290,26 +389,23 @@ export default function NotesPage() {
                   </Select>
                 </label>
                 <span className="text-[10px] text-faint">
-                  Markdown
+                  Rich text
                 </span>
               </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-              {preview ? (
-                <div
-                  className="markdown-preview text-[14px] leading-relaxed"
-                  dangerouslySetInnerHTML={{ __html: previewHtml }}
-                />
-              ) : (
-                <textarea
-                  ref={textareaRef}
-                  value={content}
-                  onChange={(e) => saveContent(e.target.value)}
-                  placeholder="Write something…"
-                  className="h-full min-h-[300px] w-full resize-none bg-transparent text-[14px] leading-relaxed text-ink placeholder:text-faint focus:outline-none dark:text-[#e8efe9]"
-                />
-              )}
+              <div
+                ref={editorRef}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={() => {
+                  if (editorRef.current) saveContent(editorRef.current.innerHTML);
+                }}
+                onKeyDown={handleKeyDown}
+                data-placeholder="Write something…"
+                className="note-editor h-full min-h-[300px] w-full text-[14px] leading-relaxed"
+              />
             </div>
           </>
         )}

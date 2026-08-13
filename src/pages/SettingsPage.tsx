@@ -44,6 +44,8 @@ const SHORTCUTS: Array<{ keys: string; action: string }> = [
   { keys: "⇧ N", action: "New note" },
   { keys: "/", action: "Search" },
   { keys: "⌘ K", action: "Toggle search" },
+  { keys: "⌘ H", action: "Heading (in note editor)" },
+  { keys: "⌘ Z / ⇧⌘Z", action: "Undo / Redo (in note editor)" },
   { keys: "1", action: "Go to Home" },
   { keys: "2", action: "Go to Tasks" },
   { keys: "3", action: "Go to Notes" },

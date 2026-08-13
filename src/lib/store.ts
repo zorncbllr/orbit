@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { marked } from "marked";
 import {
   isPermissionGranted,
   sendNotification,
@@ -219,6 +220,33 @@ async function readPersistedState(): Promise<PersistedState> {
   return persisted;
 }
 
+async function migrateNoteContent(notes: Note[]): Promise<Note[]> {
+  const needs = notes.filter(
+    (n) => n.content.length > 0 && !n.content.includes("<")
+  );
+  if (needs.length === 0) return notes;
+  const migrated: Note[] = [];
+  for (const n of needs) {
+    try {
+      migrated.push({
+        ...n,
+        content: marked.parse(n.content, { async: false }) as string,
+      });
+    } catch {
+      // leave note as-is if markdown parsing fails
+    }
+  }
+  for (const m of migrated) {
+    await dbExecute("UPDATE notes SET content = ?, updated_at = ? WHERE id = ?", [
+      m.content,
+      m.updated_at,
+      m.id,
+    ]);
+  }
+  const byId = new Map(migrated.map((m) => [m.id, m]));
+  return notes.map((n) => byId.get(n.id) ?? n);
+}
+
 function patchTaskIn(
   tasks: TaskWithExtras[],
   id: string,
@@ -266,6 +294,8 @@ export const useStore = create<StoreState>()((set, get) => ({
             dbSelect<Event>("SELECT * FROM events ORDER BY start_at ASC"),
           ]);
 
+        const migratedNotes = await migrateNoteContent(notes);
+
         const subtaskMap = new Map<string, Subtask[]>();
         for (const s of subtasks) {
           const list = subtaskMap.get(s.task_id) ?? [];
@@ -309,7 +339,7 @@ export const useStore = create<StoreState>()((set, get) => ({
 
         set({
           projects,
-          notes,
+          notes: migratedNotes,
           events,
           tasks: backfillTasks.map((t) => ({
             ...t,
